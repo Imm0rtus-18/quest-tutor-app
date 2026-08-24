@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova's Quest — Parent Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito+Sans:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1B1B3A;
+    --bg-panel:#242552;
+    --bg-panel-alt:#2E2F66;
+    --accent:#FFB84D;
+    --accent-soft:rgba(255,184,77,0.16);
+    --text:#F5F3FF;
+    --text-muted:#A6A4CC;
+    --border:rgba(255,255,255,0.09);
+    --error:#FF6B6B;
+    --success:#7ED957;
+    --radius:14px;
+    --font-display:'Baloo 2', system-ui, sans-serif;
+    --font-body:'Nunito Sans', system-ui, sans-serif;
+    --font-mono:'Space Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;min-height:100%;}
+  body{
+    font-family:var(--font-body);
+    color:var(--text);
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(255,255,255,0.07) 0, rgba(255,255,255,0.07) 1.5px, transparent 2px),
+      radial-gradient(circle at 60% 65%, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 1.5px, transparent 2px),
+      radial-gradient(circle at 85% 30%, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1.5px, transparent 2px),
+      radial-gradient(circle at 35% 85%, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1.5px, transparent 2px);
+    background-size:220px 220px;
+    min-height:100vh;
+  }
+  button{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .shell{max-width:760px;margin:0 auto;padding:36px 20px 80px;}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;}
+  .brand-star{
+    width:34px;height:34px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #FFE7BE, var(--accent));
+    box-shadow:0 0 18px rgba(255,184,77,0.5);
+  }
+  .brand-name{font-family:var(--font-display);font-weight:800;font-size:20px;margin:0;}
+  .brand-name span{color:var(--accent);}
+  .back-link{
+    margin-left:auto;font-size:13px;font-weight:700;color:var(--text-muted);
+    text-decoration:none;border:1px solid var(--border);border-radius:var(--radius);
+    padding:8px 14px;transition:color 0.15s,border-color 0.15s;
+  }
+  .back-link:hover{color:var(--accent);border-color:var(--accent);}
+
+  .page-kicker{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--accent);margin:0 0 6px;
+  }
+  .page-title{font-family:var(--font-display);font-weight:800;font-size:30px;margin:0 0 6px;}
+  .page-subtitle{color:var(--text-muted);font-size:14px;margin:0 0 26px;}
+
+  .status-note{
+    font-size:13px;color:var(--text-muted);min-height:18px;margin:0 0 18px;
+  }
+  .status-note.error{color:var(--error);}
+
+  .section-title{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--accent);margin:0 0 12px;
+  }
+  .progress-section{margin-bottom:30px;}
+  .student-cards{display:flex;flex-direction:column;gap:14px;}
+  .student-card{
+    background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:18px;padding:18px 20px;
+  }
+  .student-card-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .student-name{font-family:var(--font-display);font-weight:800;font-size:17px;margin:0;}
+  .student-streak{margin-left:auto;font-size:13px;font-weight:700;}
+  .student-streak strong{font-family:var(--font-mono);color:var(--accent);}
+  .student-stats{display:flex;gap:14px;flex-wrap:wrap;}
+  .stat-block{
+    background:var(--bg-panel-alt);border:1px solid var(--border);
+    border-radius:12px;padding:10px 14px;min-width:120px;flex:1;
+  }
+  .stat-label{
+    font-family:var(--font-mono);font-size:10px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;
+  }
+  .stat-value{font-family:var(--font-display);font-weight:800;font-size:20px;margin:0;color:var(--accent);}
+  .stat-sub{font-size:11px;color:var(--text-muted);margin:2px 0 0;}
+  .subject-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
+  .subject-dot.math{background:#5EC8F2;}
+  .subject-dot.reading{background:#FF8A75;}
+  .subject-dot.science{background:#7ED957;}
+  .subject-row{font-size:13px;margin:4px 0;display:flex;align-items:center;}
+  .subject-row strong{margin-left:auto;font-family:var(--font-mono);font-size:11px;font-weight:400;color:var(--text-muted);}
+
+  .pending-list{display:flex;flex-direction:column;gap:16px;}
+  .pending-card{
+    background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:18px;padding:20px;display:flex;gap:16px;flex-wrap:wrap;
+  }
+  .pending-thumb{
+    width:96px;height:96px;flex:0 0 96px;border-radius:12px;object-fit:cover;
+    border:1px solid var(--border);background:var(--bg-panel-alt);
+  }
+  .pending-thumb-fallback{
+    width:96px;height:96px;flex:0 0 96px;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--bg-panel-alt);border:1px solid var(--border);font-size:34px;
+  }
+  .pending-body{flex:1;min-width:220px;}
+  .pending-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+  .type-pill{
+    font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--accent-soft);color:var(--accent);
+    border:1px solid rgba(255,184,77,0.35);border-radius:999px;padding:4px 10px;
+  }
+  .pending-student{font-size:13px;font-weight:700;}
+  .pending-date{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);}
+  .pending-note{font-size:14px;line-height:1.5;margin:0 0 10px;}
+  .pending-link{
+    font-size:13px;color:var(--accent);word-break:break-all;text-decoration:none;
+  }
+  .pending-link:hover{text-decoration:underline;}
+  .pending-actions{display:flex;gap:10px;margin-top:14px;}
+  .approve-btn,.decline-btn{
+    padding:10px 18px;border-radius:var(--radius);border:none;cursor:pointer;
+    font-family:var(--font-body);font-weight:700;font-size:13px;
+    transition:opacity 0.15s;
+  }
+  .approve-btn{background:var(--accent);color:#3A2400;}
+  .decline-btn{
+    background:transparent;color:var(--text-muted);
+    border:1px solid var(--border);
+  }
+  .decline-btn:hover{color:var(--error);border-color:var(--error);}
+  .approve-btn:hover{opacity:0.88;}
+  .approve-btn:disabled,.decline-btn:disabled{opacity:0.5;cursor:default;}
+
+  .empty-state{
+    background:var(--bg-panel);border:1px dashed var(--border);border-radius:18px;
+    padding:48px 24px;text-align:center;
+  }
+  .empty-title{font-family:var(--font-display);font-weight:700;font-size:18px;margin:0 0 6px;}
+  .empty-copy{color:var(--text-muted);font-size:14px;margin:0;}
+
+  .auth-wall{
+    background:var(--bg-panel);border:1px solid var(--border);border-radius:18px;
+    padding:40px 28px;text-align:center;max-width:420px;margin:60px auto 0;
+  }
+  .auth-wall a{color:var(--accent);font-weight:700;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brand">
+    <div class="brand-star" aria-hidden="true"></div>
+    <h2 class="brand-name">Nova's <span>Quest</span></h2>
+    <a class="back-link" href="/">Back to app</a>
+  </div>
+
+  <p class="page-kicker">Mission control for grown-ups</p>
+  <h1 class="page-title">Parent Portal</h1>
+  <p class="page-subtitle">Review the rewards Nova has requested. Approving or declining updates her wishlist right away.</p>
+
+  <p class="status-note" id="statusNote"></p>
+
+  <div class="progress-section" id="progressSection" hidden>
+    <p class="section-title">Student Progress</p>
+    <div class="student-cards" id="studentCards"></div>
+  </div>
+
+  <p class="section-title" id="requestsTitle" hidden>Wishlist Requests</p>
+  <div id="content"></div>
+</div>
+
+<script>
+const content = document.getElementById('content');
+const statusNote = document.getElementById('statusNote');
+
+function setStatus(msg, isError) {
+  statusNote.textContent = msg || '';
+  statusNote.classList.toggle('error', !!isError);
+}
+
+function typeLabel(t) {
+  return t === 'photo' ? 'Photo' : t === 'video' ? 'Video' : 'Link';
+}
+function typeEmoji(t) {
+  return t === 'photo' ? '📷' : t === 'video' ? '🎬' : '🔗';
+}
+
+function esc(s) {
+  const div = document.createElement('div');
+  div.textContent = s == null ? '' : String(s);
+  return div.innerHTML;
+}
+
+function renderEmpty() {
+  content.innerHTML =
+    '<div class="empty-state">' +
+      '<p class="empty-title">All clear! 🌟</p>' +
+      '<p class="empty-copy">There are no pending reward requests right now.</p>' +
+    '</div>';
+}
+
+function renderItems(items) {
+  if (!items.length) { renderEmpty(); return; }
+  const list = document.createElement('div');
+  list.className = 'pending-list';
+
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'pending-card';
+
+    const thumb = item.source_type === 'photo' && item.photo_data
+      ? '<img class="pending-thumb" src="' + esc(item.photo_data) + '" alt="Submitted photo">'
+      : '<div class="pending-thumb-fallback" aria-hidden="true">' + typeEmoji(item.source_type) + '</div>';
+
+    const when = item.saved_at ? new Date(item.saved_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const link = item.source_url
+      ? '<a class="pending-link" href="' + esc(item.source_url) + '" target="_blank" rel="noopener noreferrer">' + esc(item.source_url) + '</a>'
+      : '';
+
+    card.innerHTML =
+      thumb +
+      '<div class="pending-body">' +
+        '<div class="pending-meta">' +
+          '<span class="type-pill">' + typeLabel(item.source_type) + '</span>' +
+          '<span class="pending-student">' + esc(item.username) + '</span>' +
+          '<span class="pending-date">' + esc(when) + '</span>' +
+        '</div>' +
+        '<p class="pending-note">' + esc(item.note) + '</p>' +
+        link +
+        '<div class="pending-actions">' +
+          '<button class="approve-btn" type="button">Approve</button>' +
+          '<button class="decline-btn" type="button">Decline</button>' +
+        '</div>' +
+      '</div>';
+
+    const approveBtn = card.querySelector('.approve-btn');
+    const declineBtn = card.querySelector('.decline-btn');
+    const decide = async decision => {
+      approveBtn.disabled = true;
+      declineBtn.disabled = true;
+      setStatus('');
+      try {
+        const res = await fetch('/api/parent/wishlist/' + item.id + '/decision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not update that item.');
+        card.remove();
+        setStatus(decision === 'approved' ? 'Approved ✓' : 'Declined ✓');
+        if (!list.children.length) renderEmpty();
+      } catch (err) {
+        approveBtn.disabled = false;
+        declineBtn.disabled = false;
+        setStatus(err.message, true);
+      }
+    };
+    approveBtn.addEventListener('click', () => decide('approved'));
+    declineBtn.addEventListener('click', () => decide('declined'));
+
+    list.appendChild(card);
+  });
+
+  content.innerHTML = '';
+  content.appendChild(list);
+}
+
+const LEVEL_LABELS = { algebra1: 'Algebra I', geometry: 'Geometry', algebra2: 'Algebra II', precalc: 'Pre-Calculus' };
+
+// Mirrors the Mastery Score formula on the student's Progress panel.
+function masteryScore(s) {
+  const completion = Math.min(100, Math.round((s.xp / (s.xp_cap || 200)) * 100));
+  const progress = Math.min(100, s.level * 10);
+  const engagement = Math.min(100, s.streak || 0);
+  const badgesEarned = 1; // same static badge set shown on the student panel
+  const mastery = Math.min(100, Math.round((badgesEarned / 3) * 100));
+  return Math.round((completion + progress + engagement + mastery) / 4);
+}
+
+function renderSummary(students) {
+  const section = document.getElementById('progressSection');
+  const cards = document.getElementById('studentCards');
+  if (!students.length) { section.hidden = true; return; }
+  cards.innerHTML = '';
+  students.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'student-card';
+    const mathLabel = (LEVEL_LABELS[s.subject_level] || 'Math') + ' · LV ' + s.level;
+    card.innerHTML =
+      '<div class="student-card-top">' +
+        '<p class="student-name">' + esc(s.username) + '</p>' +
+        '<span class="student-streak">🔥 <strong>' + esc(s.streak || 0) + '</strong> day streak</span>' +
+      '</div>' +
+      '<div class="student-stats">' +
+        '<div class="stat-block">' +
+          '<p class="stat-label">Mastery Score</p>' +
+          '<p class="stat-value">' + masteryScore(s) + '<span class="stat-sub"> / 100</span></p>' +
+          '<p class="stat-sub">' + esc(s.xp) + ' / ' + esc(s.xp_cap) + ' XP</p>' +
+        '</div>' +
+        '<div class="stat-block">' +
+          '<p class="stat-label">Subjects</p>' +
+          '<div class="subject-row"><span class="subject-dot math"></span>Math<strong>' + esc(mathLabel) + '</strong></div>' +
+          '<div class="subject-row"><span class="subject-dot reading"></span>Reading<strong>Grade 5</strong></div>' +
+          '<div class="subject-row"><span class="subject-dot science"></span>Science<strong>Grade 8</strong></div>' +
+        '</div>' +
+      '</div>';
+    cards.appendChild(card);
+  });
+  section.hidden = false;
+}
+
+async function loadSummary() {
+  try {
+    const res = await fetch('/api/parent/summary');
+    if (!res.ok) return; // summary is optional; wishlist section handles auth messaging
+    const data = await res.json();
+    renderSummary(data.students || []);
+  } catch (err) {
+    // read-only extra — never block the approval section
+  }
+}
+
+async function load() {
+  try {
+    const res = await fetch('/api/parent/pending');
+    if (res.status === 401) {
+      content.innerHTML =
+        '<div class="auth-wall">' +
+          '<p class="empty-title">Please log in first</p>' +
+          '<p class="empty-copy">Log in on the <a href="/">main app</a>, then come back to this page.</p>' +
+        '</div>';
+      return;
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load pending submissions.');
+    document.getElementById('requestsTitle').hidden = false;
+    loadSummary();
+    renderItems(data.items || []);
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+load();
+</script>
+</body>
+</html>

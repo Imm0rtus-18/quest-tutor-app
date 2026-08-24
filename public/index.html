@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova's Quest — Algebra II Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito+Sans:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1B1B3A;
+    --bg-panel:#242552;
+    --bg-panel-alt:#2E2F66;
+    --accent:#FFB84D;
+    --accent-soft:rgba(255,184,77,0.16);
+    --math:#5EC8F2;
+    --science:#7ED957;
+    --reading:#FF8A75;
+    --social:#B18CFF;
+    --text:#F5F3FF;
+    --text-muted:#A6A4CC;
+    --border:rgba(255,255,255,0.09);
+    --error:#FF6B6B;
+    --radius:14px;
+    --font-display:'Baloo 2', system-ui, sans-serif;
+    --font-body:'Nunito Sans', system-ui, sans-serif;
+    --font-mono:'Space Mono', monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:var(--font-body);
+    color:var(--text);
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(255,255,255,0.07) 0, rgba(255,255,255,0.07) 1.5px, transparent 2px),
+      radial-gradient(circle at 60% 65%, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 1.5px, transparent 2px),
+      radial-gradient(circle at 85% 30%, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1.5px, transparent 2px),
+      radial-gradient(circle at 35% 85%, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1.5px, transparent 2px);
+    background-size:220px 220px;
+    min-height:100vh;
+  }
+  button{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  /* ── Shared overlay background ─────────────────────────────────── */
+  .overlay-bg{
+    position:fixed;inset:0;z-index:100;
+    display:flex;align-items:center;justify-content:center;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(255,255,255,0.07) 0, rgba(255,255,255,0.07) 1.5px, transparent 2px),
+      radial-gradient(circle at 60% 65%, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 1.5px, transparent 2px),
+      radial-gradient(circle at 85% 30%, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1.5px, transparent 2px),
+      radial-gradient(circle at 35% 85%, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1.5px, transparent 2px);
+    background-size:220px 220px;
+  }
+  .overlay-bg.hidden{display:none;}
+
+  /* ── Auth overlay ───────────────────────────────────────────────── */
+  .auth-card{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:32px 28px;
+    width:100%;max-width:360px;
+  }
+  .auth-brand{
+    display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;
+  }
+  .auth-tabs{
+    display:flex;gap:4px;
+    background:var(--bg-panel-alt);
+    border-radius:var(--radius);
+    padding:4px;
+    margin-bottom:20px;
+  }
+  .auth-tab{
+    flex:1;padding:8px;border:none;border-radius:10px;
+    background:transparent;color:var(--text-muted);
+    font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer;
+    transition:background 0.15s,color 0.15s;
+  }
+  .auth-tab.active{background:var(--accent);color:#3A2400;}
+  .auth-field{margin-bottom:14px;}
+  .auth-label{
+    display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;
+  }
+  .auth-input{
+    width:100%;background:var(--bg-panel-alt);border:1px solid var(--border);
+    border-radius:var(--radius);padding:11px 14px;color:var(--text);
+    font-family:var(--font-body);font-size:14px;
+    transition:border-color 0.15s;
+  }
+  .auth-input:focus{border-color:var(--accent);outline:none;}
+  .auth-error{
+    font-size:12px;color:var(--error);min-height:18px;margin:0 0 10px;
+  }
+  .auth-submit{
+    width:100%;padding:12px;border:none;border-radius:var(--radius);
+    background:var(--accent);color:#3A2400;
+    font-family:var(--font-body);font-weight:700;font-size:14px;cursor:pointer;
+    transition:opacity 0.15s;
+  }
+  .auth-submit:hover{opacity:0.88;}
+  .auth-submit:disabled{opacity:0.5;cursor:default;}
+
+  /* ── Onboarding overlay ─────────────────────────────────────────── */
+  .ob-card{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:32px 28px;
+    width:100%;max-width:520px;
+  }
+  .ob-progress-header{margin-bottom:22px;}
+  .ob-step{
+    display:block;font-family:var(--font-mono);font-size:11px;
+    color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px;
+  }
+  .ob-bar{
+    height:6px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;
+  }
+  .ob-bar-fill{
+    height:100%;background:linear-gradient(90deg, var(--accent), #FFD98A);
+    border-radius:999px;transition:width 0.4s ease;
+  }
+  .ob-level-label{
+    font-family:var(--font-display);font-weight:700;font-size:12px;
+    color:var(--accent);text-transform:uppercase;letter-spacing:1px;
+    margin:0 0 10px;
+  }
+  .ob-question{
+    font-size:17px;font-weight:700;line-height:1.4;
+    margin:0 0 20px;color:var(--text);
+  }
+  .ob-options{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+  .ob-option{
+    width:100%;text-align:left;
+    background:var(--bg-panel-alt);border:1px solid var(--border);
+    border-radius:var(--radius);padding:12px 16px;
+    color:var(--text);font-size:14px;font-weight:600;cursor:pointer;
+    transition:border-color 0.15s,background 0.15s;
+  }
+  .ob-option:hover{border-color:var(--text-muted);}
+  .ob-option.selected{
+    border-color:var(--accent);
+    background:var(--accent-soft);
+    color:var(--text);
+  }
+  .ob-continue{
+    width:100%;padding:12px;border:none;border-radius:var(--radius);
+    background:var(--accent);color:#3A2400;
+    font-family:var(--font-body);font-weight:700;font-size:14px;cursor:pointer;
+    transition:opacity 0.15s;
+  }
+  .ob-continue:hover{opacity:0.88;}
+  .ob-continue:disabled{opacity:0.5;cursor:default;}
+  .ob-continue.hidden{display:none;}
+
+  /* Placement result */
+  .placement-icon{font-size:40px;text-align:center;margin-bottom:12px;}
+  .placement-title{
+    font-family:var(--font-display);font-weight:800;font-size:20px;
+    text-align:center;margin:0 0 6px;
+  }
+  .placement-sub{
+    font-size:13px;color:var(--text-muted);text-align:center;margin:0 0 16px;
+  }
+  .placement-level{
+    font-family:var(--font-display);font-weight:800;font-size:28px;
+    color:var(--accent);text-align:center;margin:0 0 24px;
+  }
+
+  /* ── Main app ───────────────────────────────────────────────────── */
+  .app{max-width:1180px;margin:0 auto;padding:22px 20px 40px;}
+
+  .app-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .nova-mark{
+    width:38px;height:38px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #FFE7BE, var(--accent));
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;color:#3A2400;font-weight:700;
+    animation:pulse 3.5s ease-in-out infinite;
+  }
+  .eyebrow{
+    font-family:var(--font-display);font-weight:800;font-size:20px;
+    margin:0;letter-spacing:0.3px;
+  }
+  .scope-tag{
+    font-family:var(--font-body);font-weight:700;font-size:11px;
+    color:var(--bg);background:var(--accent);
+    padding:2px 9px;border-radius:999px;margin-left:8px;vertical-align:middle;
+  }
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+  .username-label{font-size:12px;color:var(--text-muted);font-weight:700;}
+  .logout-btn{
+    background:transparent;color:var(--text-muted);
+    border:1px solid var(--border);border-radius:999px;
+    padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;
+  }
+  .logout-btn:hover{color:var(--text);border-color:var(--text-muted);}
+
+  .page-nav{
+    display:flex;gap:8px;align-items:center;
+    margin:0 0 18px;padding:5px;
+    background:rgba(36,37,82,0.72);border:1px solid var(--border);
+    border-radius:16px;width:max-content;max-width:100%;
+  }
+  .nav-btn{
+    display:flex;align-items:center;gap:7px;
+    border:0;border-radius:11px;padding:9px 14px;
+    background:transparent;color:var(--text-muted);
+    font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;
+    transition:background 0.15s,color 0.15s;
+  }
+  .nav-btn:hover{color:var(--text);}
+  .nav-btn.active{background:var(--accent);color:#3A2400;}
+  .nav-count{
+    min-width:20px;padding:2px 6px;border-radius:999px;
+    background:rgba(255,255,255,0.1);font-family:var(--font-mono);font-size:10px;
+  }
+  .nav-btn.active .nav-count{background:rgba(58,36,0,0.12);}
+  .view[hidden]{display:none;}
+
+  .panels{
+    display:grid;
+    grid-template-columns:220px 1fr 250px;
+    gap:16px;
+    align-items:start;
+  }
+  .panel{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:16px;
+  }
+  .panel-title{
+    font-family:var(--font-display);font-weight:700;font-size:14px;
+    color:var(--text-muted);margin:2px 0 14px;
+  }
+
+  /* Node / flowchart */
+  .path{display:flex;flex-direction:column;align-items:center;}
+  .node{
+    width:100%;
+    display:flex;align-items:center;gap:10px;
+    background:var(--bg-panel-alt);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:10px 12px;
+    cursor:pointer;
+    text-align:left;
+    color:var(--text);
+    position:relative;
+  }
+  .node .node-icon{font-size:20px;}
+  .node .node-label{font-family:var(--font-body);font-weight:700;font-size:13px;line-height:1.3;}
+  .node .node-label small{font-weight:400;color:var(--text-muted);}
+  .node.active{
+    border-color:var(--math);
+    box-shadow:0 0 0 1px var(--math), 0 0 18px rgba(94,200,242,0.25);
+    animation:glow 3s ease-in-out infinite;
+  }
+  .node.active .node-icon{filter:drop-shadow(0 0 6px rgba(94,200,242,0.6));}
+  .node.completed{
+    opacity:0.72;
+    border-color:var(--science);
+  }
+  .node.locked{opacity:0.5;}
+  .node.locked:hover{opacity:0.75;}
+  .soon-tag{
+    position:absolute;top:8px;right:10px;
+    font-size:10px;font-weight:700;color:var(--text-muted);
+    border:1px solid var(--border);border-radius:999px;padding:1px 7px;
+  }
+  .done-tag{
+    position:absolute;top:8px;right:10px;
+    font-size:10px;font-weight:700;color:var(--science);
+    border:1px solid var(--science);border-radius:999px;padding:1px 7px;
+  }
+  .path-line{width:2px;height:20px;background:repeating-linear-gradient(var(--border) 0 4px, transparent 4px 8px);}
+
+  /* Chat panel */
+  .chat-panel{display:flex;flex-direction:column;min-height:520px;padding:0;overflow:hidden;}
+  .chat-header{
+    display:flex;align-items:center;gap:10px;
+    padding:14px 16px;border-bottom:1px solid var(--border);
+  }
+  .nova-avatar{
+    width:34px;height:34px;border-radius:50%;flex-shrink:0;
+    background:radial-gradient(circle at 35% 30%, #FFE7BE, var(--accent));
+    display:flex;align-items:center;justify-content:center;font-weight:700;color:#3A2400;
+  }
+  .chat-title{font-family:var(--font-display);font-weight:700;font-size:15px;margin:0;}
+  .chat-sub{font-size:12px;color:var(--text-muted);margin:1px 0 0;}
+  .reset-btn{
+    margin-left:auto;background:transparent;color:var(--text-muted);
+    border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;
+  }
+  .reset-btn:hover{color:var(--text);border-color:var(--text-muted);}
+
+  .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;}
+  .bubble{max-width:78%;padding:11px 14px;border-radius:16px;font-size:14.5px;line-height:1.5;}
+  .bubble.assistant{
+    background:var(--accent-soft);color:var(--text);
+    border:1px solid rgba(255,184,77,0.3);
+    align-self:flex-start;border-bottom-left-radius:4px;
+  }
+  .bubble.user{
+    background:var(--bg-panel-alt);color:var(--text);
+    align-self:flex-end;border-bottom-right-radius:4px;
+  }
+  .bubble.error{background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.35);color:#FFD6D6;}
+  .bubble.typing{display:flex;gap:4px;align-items:center;padding:14px;}
+  .bubble.typing span{
+    width:6px;height:6px;border-radius:50%;background:var(--accent);
+    animation:bounce 1.2s infinite ease-in-out;
+  }
+  .bubble.typing span:nth-child(2){animation-delay:0.15s;}
+  .bubble.typing span:nth-child(3){animation-delay:0.3s;}
+
+  .composer{display:flex;gap:8px;padding:14px 16px;border-top:1px solid var(--border);}
+  .composer input{
+    flex:1;background:var(--bg-panel-alt);border:1px solid var(--border);
+    border-radius:999px;padding:11px 16px;color:var(--text);font-size:14px;
+  }
+  .composer input::placeholder{color:var(--text-muted);}
+  .composer button{
+    width:42px;height:42px;border-radius:50%;border:none;
+    background:var(--accent);color:#3A2400;font-size:16px;font-weight:700;cursor:pointer;flex-shrink:0;
+  }
+  .composer button:disabled{opacity:0.5;cursor:default;}
+
+  /* Progress panel */
+  .subject-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
+  .subject-dot.math{background:var(--math);}
+  .subject-dot.reading{background:var(--reading);}
+  .subject-dot.science{background:var(--science);}
+
+  .xp-card{background:var(--bg-panel-alt);border-radius:var(--radius);padding:12px;margin-bottom:12px;}
+  .xp-card-top{display:flex;align-items:center;font-size:13px;font-weight:700;margin-bottom:8px;}
+  .level-readout{margin-left:auto;font-family:var(--font-mono);font-size:12px;color:var(--accent);}
+  .xp-bar{height:8px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;}
+  .xp-fill{height:100%;background:linear-gradient(90deg, var(--accent), #FFD98A);border-radius:999px;transition:width 0.6s ease;}
+  .xp-caption{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin:6px 0 0;}
+
+  .mini-stat{display:flex;align-items:center;font-size:13px;padding:8px 4px;border-bottom:1px solid var(--border);}
+  .mini-stat strong{margin-left:auto;font-family:var(--font-mono);font-size:12px;font-weight:400;color:var(--text-muted);}
+
+  .mastery-card{
+    margin-top:12px;padding:12px 14px;border-radius:var(--radius);
+    background:var(--bg-panel-alt);border:1px solid var(--border);
+  }
+  .mastery-label{
+    font-family:var(--font-mono);font-size:10px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;
+  }
+  .mastery-score{
+    font-family:var(--font-display);font-weight:800;font-size:28px;
+    color:var(--accent);line-height:1;margin:0 0 6px;
+  }
+  .mastery-score .mastery-denom{font-size:13px;color:var(--text-muted);font-weight:700;}
+  .mastery-inputs{
+    font-size:11px;color:var(--text-muted);margin:0;line-height:1.6;
+  }
+  .knowledge-map{
+    margin-top:12px;padding:12px 14px;border-radius:var(--radius);
+    background:var(--bg-panel-alt);border:1px solid var(--border);
+  }
+  .knowledge-map-label{
+    font-family:var(--font-mono);font-size:10px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--text-muted);margin:0 0 10px;
+  }
+  .km-path{display:flex;align-items:flex-start;}
+  .km-node{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;}
+  .km-circle{
+    width:22px;height:22px;border-radius:50%;
+    border:2px solid var(--border);background:var(--bg-panel);
+  }
+  .km-node.reading .km-circle{background:var(--reading);border-color:var(--reading);}
+  .km-node.science .km-circle{background:var(--science);border-color:var(--science);}
+  .km-node.math .km-circle{
+    background:var(--math);border-color:var(--math);
+    box-shadow:0 0 10px rgba(94,200,242,0.55);
+  }
+  .km-name{font-size:11px;font-weight:700;margin-top:6px;}
+  .km-level{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px;}
+  .km-line{
+    flex:1;height:2px;margin-top:10px;
+    background:linear-gradient(90deg, rgba(255,255,255,0.25), rgba(255,255,255,0.25));
+    border-radius:2px;min-width:14px;
+  }
+  .streak{margin-top:12px;font-size:13px;font-weight:700;}
+  .streak strong{font-family:var(--font-mono);color:var(--accent);}
+
+  .badges-title{font-size:12px;color:var(--text-muted);margin:16px 0 8px;}
+  .badges{display:flex;gap:8px;margin-bottom:14px;}
+  .badge{
+    width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:var(--bg-panel-alt);border:1px solid var(--border);font-size:16px;opacity:0.4;
+  }
+  .badge.earned{opacity:1;border-color:var(--accent);box-shadow:0 0 10px rgba(255,184,77,0.35);}
+
+  .visible-note{font-size:11px;color:var(--text-muted);margin:4px 0 8px;}
+  .memory-btn{
+    width:100%;padding:9px;border-radius:999px;border:1px solid var(--border);
+    background:transparent;color:var(--text);font-size:12.5px;font-weight:700;cursor:pointer;
+  }
+  .memory-btn:hover{border-color:var(--text-muted);}
+
+  /* Rewards */
+  .page-shell{max-width:980px;}
+  .page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:4px 0 20px;}
+  .page-kicker{
+    margin:0 0 4px;color:var(--accent);font-family:var(--font-mono);
+    font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
+  }
+  .page-title{margin:0;font-family:var(--font-display);font-size:32px;line-height:1.05;}
+  .page-subtitle{margin:7px 0 0;color:var(--text-muted);font-size:14px;line-height:1.5;}
+  .xp-pill{
+    flex-shrink:0;background:var(--accent-soft);border:1px solid rgba(255,184,77,0.3);
+    border-radius:999px;padding:8px 12px;color:var(--accent);
+    font-family:var(--font-mono);font-size:11px;font-weight:700;
+  }
+  .reward-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+  .custom-panel{
+    margin-top:18px;background:linear-gradient(135deg,rgba(46,47,102,0.9),rgba(36,37,82,0.96));
+    border:1px solid rgba(255,184,77,0.24);border-radius:18px;padding:20px;
+  }
+  .custom-panel-heading{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;}
+  .custom-panel-icon{
+    width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;background:var(--accent-soft);color:var(--accent);font-size:20px;
+  }
+  .custom-panel-title{margin:0 0 3px;font-family:var(--font-display);font-size:20px;}
+  .custom-panel-copy{margin:0;color:var(--text-muted);font-size:13px;line-height:1.45;}
+  .custom-form{display:grid;grid-template-columns:180px 1fr;gap:12px 16px;align-items:start;}
+  .source-picker{display:flex;flex-direction:column;gap:7px;}
+  .source-picker-label,.custom-field-label{
+    color:var(--text-muted);font-size:11px;font-weight:800;letter-spacing:.2px;
+  }
+  .source-toggle{
+    display:flex;flex-direction:column;gap:5px;padding:4px;
+    background:rgba(27,27,58,0.55);border:1px solid var(--border);border-radius:12px;
+  }
+  .source-btn{
+    display:flex;align-items:center;gap:8px;border:0;border-radius:8px;padding:8px 10px;
+    background:transparent;color:var(--text-muted);font-size:12px;font-weight:800;text-align:left;cursor:pointer;
+  }
+  .source-btn:hover{color:var(--text);}
+  .source-btn.active{background:var(--accent-soft);color:var(--accent);}
+  .custom-fields{display:flex;flex-direction:column;gap:12px;}
+  .custom-field{display:flex;flex-direction:column;gap:6px;}
+  .custom-input,.custom-textarea{
+    width:100%;background:rgba(27,27,58,0.55);border:1px solid var(--border);
+    border-radius:11px;padding:10px 12px;color:var(--text);font:inherit;font-size:13px;
+  }
+  .custom-input:focus,.custom-textarea:focus{outline:none;border-color:var(--accent);}
+  .custom-textarea{min-height:70px;resize:vertical;line-height:1.45;}
+  .custom-input::placeholder,.custom-textarea::placeholder{color:var(--text-muted);}
+  .custom-helper{margin:0;color:var(--text-muted);font-size:11px;line-height:1.4;}
+  .photo-upload{
+    display:flex;align-items:center;gap:10px;min-height:70px;padding:10px;
+    border:1px dashed rgba(255,255,255,0.18);border-radius:11px;background:rgba(27,27,58,0.55);
+  }
+  .photo-upload input{max-width:100%;font-size:12px;color:var(--text-muted);}
+  .photo-preview{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .photo-preview img{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--accent);}
+  .photo-preview span{color:var(--science);font-size:11px;font-weight:700;}
+  .custom-form-footer{grid-column:2;display:flex;align-items:center;gap:12px;}
+  .custom-submit{
+    border:0;border-radius:11px;padding:10px 15px;background:var(--accent);color:#3A2400;
+    font-size:12px;font-weight:800;cursor:pointer;
+  }
+  .custom-submit:hover{opacity:.88;}
+  .custom-submit:disabled{opacity:.5;cursor:default;}
+  .custom-error{min-height:16px;margin:0;color:var(--error);font-size:11px;font-weight:700;}
+  .custom-wishlist-card{
+    display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;
+    background:var(--bg-panel);border:1px solid var(--border);border-radius:18px;padding:15px 18px;
+  }
+  .custom-wishlist-card .reward-icon{width:46px;height:46px;}
+  .custom-wishlist-card .reward-name{font-size:18px;margin-bottom:4px;}
+  .custom-wishlist-card .reward-description{font-size:12px;}
+  .custom-source{margin:6px 0 0;color:var(--text-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:440px;}
+  .custom-source a{color:var(--math);text-decoration:none;}
+  .custom-source a:hover{text-decoration:underline;}
+  .custom-photo-thumb{width:46px;height:46px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,184,77,0.4);}
+  .custom-meta{display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+  .status-pill{
+    border-radius:999px;padding:4px 9px;font-family:var(--font-mono);font-size:9px;font-weight:700;
+    letter-spacing:.3px;text-transform:uppercase;
+  }
+  .status-pending{background:rgba(255,184,77,0.14);border:1px solid rgba(255,184,77,0.35);color:var(--accent);}
+  .status-approved{background:rgba(126,217,87,0.12);border:1px solid rgba(126,217,87,0.32);color:var(--science);}
+  .status-declined{background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.32);color:var(--error);}
+  .custom-remove-btn{
+    border:0;background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;
+  }
+  .custom-remove-btn:hover{color:var(--error);}
+  .reward-card{
+    display:flex;flex-direction:column;min-height:230px;
+    background:var(--bg-panel);border:1px solid var(--border);border-radius:18px;padding:18px;
+    transition:transform 0.15s,border-color 0.15s,box-shadow 0.15s;
+  }
+  .reward-card:hover{transform:translateY(-2px);border-color:rgba(255,184,77,0.45);box-shadow:0 12px 28px rgba(0,0,0,0.18);}
+  .reward-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px;}
+  .reward-icon{
+    width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+    background:var(--accent-soft);border:1px solid rgba(255,184,77,0.26);
+    color:var(--accent);font-family:var(--font-display);font-size:24px;
+  }
+  .reward-cost{color:var(--accent);font-family:var(--font-mono);font-size:11px;font-weight:700;padding-top:5px;}
+  .reward-name{margin:0 0 7px;font-family:var(--font-display);font-size:19px;line-height:1.1;}
+  .reward-description{margin:0;color:var(--text-muted);font-size:13px;line-height:1.5;}
+  .save-btn{
+    display:flex;align-items:center;justify-content:center;gap:7px;width:100%;margin-top:auto;padding:10px;
+    border:1px solid var(--border);border-radius:11px;background:transparent;color:var(--text);
+    font-size:12px;font-weight:800;cursor:pointer;transition:background 0.15s,border-color 0.15s,color 0.15s;
+  }
+  .save-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .save-btn.saved{background:var(--accent-soft);border-color:rgba(255,184,77,0.5);color:var(--accent);}
+  .heart-icon{font-size:16px;line-height:0;}
+  .empty-state{
+    background:var(--bg-panel);border:1px dashed rgba(255,255,255,0.16);border-radius:18px;
+    padding:48px 24px;text-align:center;
+  }
+  .empty-icon{font-size:34px;color:var(--accent);margin-bottom:8px;}
+  .empty-title{margin:0 0 6px;font-family:var(--font-display);font-size:21px;}
+  .empty-copy{max-width:360px;margin:0 auto 18px;color:var(--text-muted);font-size:13px;line-height:1.5;}
+  .browse-btn{
+    border:0;border-radius:999px;padding:10px 16px;background:var(--accent);color:#3A2400;
+    font-size:12px;font-weight:800;cursor:pointer;
+  }
+  .wishlist-list{display:flex;flex-direction:column;gap:12px;}
+  .wishlist-card{
+    display:grid;grid-template-columns:auto 1fr 220px;align-items:center;gap:18px;
+    background:var(--bg-panel);border:1px solid var(--border);border-radius:18px;padding:16px 18px;
+  }
+  .wishlist-card .reward-icon{width:46px;height:46px;}
+  .wishlist-card .reward-name{font-size:18px;margin-bottom:4px;}
+  .wishlist-card .reward-description{font-size:12px;}
+  .wishlist-progress{min-width:0;}
+  .progress-label{display:flex;justify-content:space-between;gap:10px;margin-bottom:7px;font-size:11px;font-weight:700;}
+  .progress-label span:last-child{color:var(--accent);font-family:var(--font-mono);font-size:10px;}
+  .reward-progress{height:8px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;}
+  .reward-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#FFD98A);transition:width 0.5s ease;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translate(-50%, 12px);
+    background:var(--bg-panel-alt);border:1px solid var(--accent);color:var(--text);
+    padding:10px 18px;border-radius:999px;font-size:13px;font-weight:700;
+    opacity:0;transition:opacity 0.25s ease, transform 0.25s ease;pointer-events:none;
+    box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+  .toast.show{opacity:1;transform:translate(-50%, 0);}
+
+  @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
+  @keyframes glow{0%,100%{box-shadow:0 0 0 1px var(--math), 0 0 14px rgba(94,200,242,0.2);}50%{box-shadow:0 0 0 1px var(--math), 0 0 22px rgba(94,200,242,0.4);}}
+  @keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:0.5;}40%{transform:translateY(-4px);opacity:1;}}
+
+  @media (prefers-reduced-motion:reduce){
+    .nova-mark,.node.active{animation:none;}
+  }
+  @media (max-width:880px){
+    .panels{grid-template-columns:1fr;}
+    .path{flex-direction:row;overflow-x:auto;padding-bottom:4px;}
+    .node{min-width:150px;}
+    .path-line{width:20px;height:2px;background:repeating-linear-gradient(90deg,var(--border) 0 4px,transparent 4px 8px);flex-shrink:0;}
+    .reward-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .wishlist-card{grid-template-columns:auto 1fr;}
+    .wishlist-progress{grid-column:1 / -1;}
+    .custom-form{grid-template-columns:1fr;}
+    .custom-form-footer{grid-column:1;}
+  }
+  @media (max-width:560px){
+    .app{padding:16px 14px 30px;}
+    .app-header{align-items:flex-start;}
+    .header-right{flex-wrap:wrap;justify-content:flex-end;gap:6px;}
+    .username-label{max-width:100px;overflow:hidden;text-overflow:ellipsis;}
+    .page-nav{width:100%;overflow-x:auto;}
+    .nav-btn{flex:1;justify-content:center;padding:9px 10px;}
+    .page-heading{display:block;}
+    .xp-pill{display:inline-block;margin-top:14px;}
+    .reward-grid{grid-template-columns:1fr;}
+    .wishlist-card{grid-template-columns:auto 1fr;gap:12px;}
+    .custom-wishlist-card{grid-template-columns:auto 1fr;}
+    .custom-meta{grid-column:1 / -1;flex-direction:row;align-items:center;justify-content:space-between;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Auth overlay ─────────────────────────────────────────────────── -->
+<div class="overlay-bg" id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="nova-mark" aria-hidden="true">✦</div>
+      <p class="eyebrow">Nova's Quest</p>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin" type="button">Log in</button>
+      <button class="auth-tab" id="tabSignup" type="button">Sign up</button>
+    </div>
+    <form id="authForm">
+      <div class="auth-field">
+        <label class="auth-label" for="authUsername">Username</label>
+        <input class="auth-input" id="authUsername" type="text" autocomplete="username" required />
+      </div>
+      <div class="auth-field">
+        <label class="auth-label" for="authPassword">Password</label>
+        <input class="auth-input" id="authPassword" type="password" autocomplete="current-password" required />
+      </div>
+      <p class="auth-error" id="authError"></p>
+      <button class="auth-submit" id="authSubmit" type="submit">Log in</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Onboarding overlay ─────────────────────────────────────────── -->
+<div class="overlay-bg hidden" id="onboardingOverlay">
+  <div class="ob-card">
+
+    <!-- Question screen -->
+    <div id="obQuestionScreen">
+      <div class="ob-progress-header">
+        <span class="ob-step" id="obStep">Question 1 of 12</span>
+        <div class="ob-bar"><div class="ob-bar-fill" id="obBarFill" style="width:0%"></div></div>
+      </div>
+      <p class="ob-level-label" id="obLevelLabel">Algebra 1</p>
+      <p class="ob-question" id="obQuestion"></p>
+      <div class="ob-options" id="obOptions"></div>
+      <button class="ob-continue hidden" id="obContinue" type="button">Continue →</button>
+    </div>
+
+    <!-- Placement result screen (hidden until submit) -->
+    <div id="obPlacementScreen" style="display:none">
+      <div class="placement-icon">🎯</div>
+      <p class="placement-title">Assessment complete</p>
+      <p class="placement-sub">Based on your answers, you've been placed in:</p>
+      <p class="placement-level" id="placementLevel">Geometry</p>
+      <button class="auth-submit" id="startLearningBtn" type="button">Start learning</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Main app ──────────────────────────────────────────────────────── -->
+<div class="app" id="mainApp" style="display:none">
+  <div class="app-header">
+    <div class="nova-mark" aria-hidden="true">✦</div>
+    <p class="eyebrow">Nova's Quest <span class="scope-tag" id="scopeTag"></span></p>
+    <div class="header-right">
+      <span class="username-label" id="usernameLabel"></span>
+      <button class="logout-btn" id="logoutBtn" type="button">Log out</button>
+    </div>
+  </div>
+
+  <nav class="page-nav" aria-label="Main navigation">
+    <button class="nav-btn active" id="questNavBtn" type="button"><span aria-hidden="true">⌁</span> Quest</button>
+    <button class="nav-btn" id="wishlistNavBtn" type="button">
+      <span aria-hidden="true">♡</span> My Wishlist <span class="nav-count" id="wishlistCount">0</span>
+    </button>
+  </nav>
+
+  <section class="view" id="questView">
+    <div class="panels">
+
+      <!-- Left panel: math track flowchart (rendered by JS) -->
+      <aside class="panel" aria-label="Math track">
+        <p class="panel-title">Math track</p>
+        <div class="path" id="questPath"></div>
+      </aside>
+
+      <!-- Chat panel -->
+      <main class="panel chat-panel" aria-label="Tutor session">
+        <div class="chat-header">
+          <div class="nova-avatar" aria-hidden="true">✦</div>
+          <div>
+            <p class="chat-title" id="chatTitle">Nova</p>
+            <p class="chat-sub">Live AI tutor</p>
+          </div>
+          <button class="reset-btn" id="resetBtn" type="button">New topic</button>
+        </div>
+        <div class="messages" id="messages"></div>
+        <form class="composer" id="composer">
+          <input id="input" placeholder="Ask Nova a question..." autocomplete="off" />
+          <button type="submit" aria-label="Send">➔</button>
+        </form>
+      </main>
+
+      <!-- Progress panel -->
+      <aside class="panel" aria-label="Mastery and notes">
+        <p class="panel-title">Progress</p>
+        <div class="xp-card">
+          <div class="xp-card-top">
+            <span class="subject-dot math"></span>
+            <span>Math</span>
+            <span class="level-readout" id="levelReadout">LV 0</span>
+          </div>
+          <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
+          <p class="xp-caption" id="xpCaption">0 / 200 XP</p>
+        </div>
+        <div class="mastery-card">
+          <p class="mastery-label">Mastery Score</p>
+          <p class="mastery-score"><span id="masteryScore">0</span><span class="mastery-denom"> / 100</span></p>
+          <p class="mastery-inputs" id="masteryInputs">Completion 0 · Progress 0 · Engagement 0 · Mastery 0</p>
+        </div>
+        <div class="knowledge-map" aria-label="Knowledge map: Reading, Science, then Math">
+          <p class="knowledge-map-label">Knowledge Map</p>
+          <div class="km-path">
+            <div class="km-node reading">
+              <div class="km-circle"></div>
+              <span class="km-name">Reading</span>
+              <span class="km-level">Grade 5</span>
+            </div>
+            <div class="km-line"></div>
+            <div class="km-node science">
+              <div class="km-circle"></div>
+              <span class="km-name">Science</span>
+              <span class="km-level">Grade 8</span>
+            </div>
+            <div class="km-line"></div>
+            <div class="km-node math">
+              <div class="km-circle"></div>
+              <span class="km-name">Math</span>
+              <span class="km-level">Algebra II</span>
+            </div>
+          </div>
+        </div>
+        <div class="mini-stat"><span class="subject-dot reading"></span>Reading<strong>Grade 5</strong></div>
+        <div class="mini-stat"><span class="subject-dot science"></span>Science<strong>Grade 8</strong></div>
+        <div class="streak">🔥 <strong id="streakCount">0</strong> day streak</div>
+        <p class="badges-title">Badges</p>
+        <div class="badges" id="badgesRow">
+        </div>
+        <p class="visible-note">Visible to parent and teacher</p>
+        <button class="memory-btn" id="memoryBtn" type="button">View full memory</button>
+      </aside>
+
+    </div>
+  </section>
+
+  <section class="view page-shell" id="wishlistView" hidden>
+    <div class="page-heading">
+      <div>
+        <p class="page-kicker">Your next destinations</p>
+        <h1 class="page-title">My Wishlist</h1>
+        <p class="page-subtitle">Request the rewards you're dreaming of and watch your progress take shape.</p>
+      </div>
+      <div class="xp-pill" id="wishlistXpPill">0 XP available</div>
+    </div>
+    <section class="custom-panel" aria-labelledby="customWishlistTitle">
+      <div class="custom-panel-heading">
+        <div class="custom-panel-icon" aria-hidden="true">＋</div>
+        <div>
+          <h2 class="custom-panel-title" id="customWishlistTitle">Have something else in mind?</h2>
+          <p class="custom-panel-copy">Add a link, photo, or video to request a custom reward. Nova will review it before it’s approved.</p>
+        </div>
+      </div>
+      <form class="custom-form" id="customWishlistForm">
+        <div class="source-picker">
+          <span class="source-picker-label">What are you saving?</span>
+          <div class="source-toggle" role="group" aria-label="Custom wishlist source type">
+            <button class="source-btn active" type="button" data-source-type="link"><span aria-hidden="true">↗</span> Link</button>
+            <button class="source-btn" type="button" data-source-type="photo"><span aria-hidden="true">▧</span> Photo</button>
+            <button class="source-btn" type="button" data-source-type="video"><span aria-hidden="true">▶</span> Video link</button>
+          </div>
+        </div>
+        <div class="custom-fields">
+          <div class="custom-field" id="customUrlField">
+            <label class="custom-field-label" for="customUrlInput" id="customUrlLabel">Paste a link</label>
+            <input class="custom-input" id="customUrlInput" type="url" placeholder="https://example.com/reward" autocomplete="url" />
+          </div>
+          <div class="custom-field" id="customPhotoField" hidden>
+            <span class="custom-field-label">Upload a photo</span>
+            <div class="photo-upload">
+              <input id="customPhotoInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+            </div>
+            <div class="photo-preview" id="customPhotoPreview" hidden></div>
+            <p class="custom-helper">JPG, PNG, WEBP, or GIF up to 5 MB.</p>
+          </div>
+          <div class="custom-field">
+            <label class="custom-field-label" for="customNoteInput">Why do you want it?</label>
+            <textarea class="custom-textarea" id="customNoteInput" maxlength="240" placeholder="A short note for Nova..." required></textarea>
+          </div>
+        </div>
+        <div class="custom-form-footer">
+          <button class="custom-submit" id="customSubmitBtn" type="submit">Add to my wishlist</button>
+          <p class="custom-error" id="customFormError" role="alert"></p>
+        </div>
+      </form>
+    </section>
+    <div class="wishlist-list" id="wishlistList"></div>
+  </section>
+  </div>
+</div>
+
+<script>
+// ── Constants (must match server LEVEL_ORDER) ──────────────────────
+const LEVEL_ORDER   = ['algebra1', 'geometry', 'algebra2', 'precalc'];
+const LEVEL_LABELS  = { algebra1:'Algebra I', geometry:'Geometry', algebra2:'Algebra II', precalc:'Pre-Calculus' };
+const LEVEL_SUBS    = { algebra1:'Equations & graphs', geometry:'Shapes & proofs', algebra2:'Functions & logs', precalc:'Trig & sequences' };
+const LEVEL_ICONS   = { algebra1:'🔢', geometry:'📐', algebra2:'🧮', precalc:'🚀' };
+
+// ── DOM refs ───────────────────────────────────────────────────────
+const mainApp        = document.getElementById('mainApp');
+const authOverlay    = document.getElementById('authOverlay');
+const onboardingOverlay = document.getElementById('onboardingOverlay');
+
+const authForm       = document.getElementById('authForm');
+const authSubmit     = document.getElementById('authSubmit');
+const authError      = document.getElementById('authError');
+const authUsername   = document.getElementById('authUsername');
+const authPassword   = document.getElementById('authPassword');
+const tabLogin       = document.getElementById('tabLogin');
+const tabSignup      = document.getElementById('tabSignup');
+
+const obQuestionScreen = document.getElementById('obQuestionScreen');
+const obPlacementScreen = document.getElementById('obPlacementScreen');
+const obStep         = document.getElementById('obStep');
+const obBarFill      = document.getElementById('obBarFill');
+const obLevelLabel   = document.getElementById('obLevelLabel');
+const obQuestion     = document.getElementById('obQuestion');
+const obOptions      = document.getElementById('obOptions');
+const obContinue     = document.getElementById('obContinue');
+const placementLevel = document.getElementById('placementLevel');
+const startLearningBtn = document.getElementById('startLearningBtn');
+
+const usernameLabel  = document.getElementById('usernameLabel');
+const logoutBtn      = document.getElementById('logoutBtn');
+const questPath      = document.getElementById('questPath');
+const messagesEl     = document.getElementById('messages');
+const composer       = document.getElementById('composer');
+const input          = document.getElementById('input');
+const sendBtn        = composer.querySelector('button[type="submit"]');
+const resetBtn       = document.getElementById('resetBtn');
+const xpFill         = document.getElementById('xpFill');
+const xpCaption      = document.getElementById('xpCaption');
+const levelReadout   = document.getElementById('levelReadout');
+const streakCount    = document.getElementById('streakCount');
+const memoryBtn      = document.getElementById('memoryBtn');
+const questNavBtn    = document.getElementById('questNavBtn');
+const wishlistNavBtn = document.getElementById('wishlistNavBtn');
+const wishlistCount  = document.getElementById('wishlistCount');
+const questView      = document.getElementById('questView');
+const wishlistView   = document.getElementById('wishlistView');
+const wishlistList   = document.getElementById('wishlistList');
+const wishlistXpPill = document.getElementById('wishlistXpPill');
+const customWishlistForm = document.getElementById('customWishlistForm');
+const customUrlField = document.getElementById('customUrlField');
+const customPhotoField = document.getElementById('customPhotoField');
+const customUrlLabel = document.getElementById('customUrlLabel');
+const customUrlInput = document.getElementById('customUrlInput');
+const customPhotoInput = document.getElementById('customPhotoInput');
+const customPhotoPreview = document.getElementById('customPhotoPreview');
+const customNoteInput = document.getElementById('customNoteInput');
+const customSubmitBtn = document.getElementById('customSubmitBtn');
+const customFormError = document.getElementById('customFormError');
+const sourceButtons = document.querySelectorAll('.source-btn');
+
+// ── App state ──────────────────────────────────────────────────────
+let conversation = [];
+let xp = 0, xpCapValue = 200, level = 0;
+let currentSubjectLevel = null;
+let authMode = 'login';
+let activeView = 'quest';
+let wishlistItems = [];
+let customSourceType = 'link';
+let customPhotoData = null;
+let wishlistLoaded = false;
+
+// ── App navigation ─────────────────────────────────────────────────
+questNavBtn.addEventListener('click', () => navigateTo('quest'));
+wishlistNavBtn.addEventListener('click', async () => {
+  navigateTo('wishlist');
+  await loadWishlist();
+});
+
+function navigateTo(view) {
+  activeView = view;
+  const isQuest = view === 'quest';
+  questView.hidden = !isQuest;
+  wishlistView.hidden = view !== 'wishlist';
+  questNavBtn.classList.toggle('active', isQuest);
+  wishlistNavBtn.classList.toggle('active', view === 'wishlist');
+  if (isQuest) input.focus();
+}
+
+// ── Custom wishlist form ────────────────────────────────────────────
+sourceButtons.forEach(button => {
+  button.addEventListener('click', () => setCustomSourceType(button.dataset.sourceType));
+});
+
+customPhotoInput.addEventListener('change', function() {
+  const file = customPhotoInput.files[0];
+  customPhotoData = null;
+  customPhotoPreview.hidden = true;
+  customPhotoPreview.innerHTML = '';
+  customFormError.textContent = '';
+  if (!file) return;
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowedTypes.includes(file.type) || file.size > 5 * 1024 * 1024) {
+    customPhotoInput.value = '';
+    customFormError.textContent = 'Please choose a JPG, PNG, WEBP, or GIF up to 5 MB.';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    customPhotoData = reader.result;
+    customPhotoPreview.hidden = false;
+    customPhotoPreview.innerHTML = '<img alt="Selected wishlist photo preview" src="' + customPhotoData + '"><span>Photo ready</span>';
+  };
+  reader.readAsDataURL(file);
+});
+
+function setCustomSourceType(type) {
+  customSourceType = type;
+  sourceButtons.forEach(button => {
+    button.classList.toggle('active', button.dataset.sourceType === type);
+    button.setAttribute('aria-pressed', String(button.dataset.sourceType === type));
+  });
+  const photoMode = type === 'photo';
+  customUrlField.hidden = photoMode;
+  customPhotoField.hidden = !photoMode;
+  customUrlInput.required = !photoMode;
+  customNoteInput.required = true;
+  customUrlLabel.textContent = type === 'video' ? 'Paste a video link' : 'Paste a link';
+  customUrlInput.placeholder = type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://example.com/reward';
+  customFormError.textContent = '';
+}
+
+customWishlistForm.addEventListener('submit', async function(event) {
+  event.preventDefault();
+  customFormError.textContent = '';
+  const note = customNoteInput.value.trim();
+  if (note.length < 3) {
+    customFormError.textContent = 'Add a short note so Nova knows why you want it.';
+    return;
+  }
+  if (customSourceType === 'photo' && !customPhotoData) {
+    customFormError.textContent = 'Choose a photo to add to your wishlist.';
+    return;
+  }
+  if (customSourceType !== 'photo') {
+    try {
+      const parsed = new URL(customUrlInput.value.trim());
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    } catch {
+      customFormError.textContent = 'Paste a valid http:// or https:// link.';
+      return;
+    }
+  }
+
+  customSubmitBtn.disabled = true;
+  customSubmitBtn.textContent = 'Submitting…';
+  try {
+    const res = await fetch('/api/wishlist/custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceType: customSourceType,
+        sourceUrl: customSourceType === 'photo' ? null : customUrlInput.value.trim(),
+        photoData: customSourceType === 'photo' ? customPhotoData : null,
+        note
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not submit that item.');
+    customWishlistForm.reset();
+    customPhotoData = null;
+    customPhotoPreview.hidden = true;
+    customPhotoPreview.innerHTML = '';
+    customPhotoInput.value = '';
+    setCustomSourceType('link');
+    await loadWishlist();
+    toast('Custom item added — pending review.');
+    navigateTo('wishlist');
+  } catch (err) {
+    customFormError.textContent = err.message;
+  } finally {
+    customSubmitBtn.disabled = false;
+    customSubmitBtn.textContent = 'Add to my wishlist';
+  }
+});
+
+// ── XP cap (must match server) ─────────────────────────────────────
+function computeXpCap(lvl) {
+  return Math.round(200 * Math.pow(1.15, lvl));
+}
+
+// ── Auth tabs ──────────────────────────────────────────────────────
+tabLogin.addEventListener('click', () => setAuthMode('login'));
+tabSignup.addEventListener('click', () => setAuthMode('signup'));
+
+function setAuthMode(mode) {
+  authMode = mode;
+  tabLogin.classList.toggle('active', mode === 'login');
+  tabSignup.classList.toggle('active', mode === 'signup');
+  authSubmit.textContent = mode === 'login' ? 'Log in' : 'Create account';
+  authError.textContent = '';
+  authPassword.setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
+}
+
+function fetchWithTimeout(url, options, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...(options || {}), signal: controller.signal })
+    .finally(() => clearTimeout(timeoutId));
+}
+
+// ── Auth form ──────────────────────────────────────────────────────
+authForm.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  authError.textContent = '';
+  const username = authUsername.value.trim();
+  const password = authPassword.value;
+  if (!username || !password) { authError.textContent = 'Please fill in both fields.'; return; }
+  authSubmit.disabled = true;
+  authSubmit.textContent = authMode === 'login' ? 'Logging in…' : 'Creating account…';
+  try {
+    const endpoint = authMode === 'login' ? '/api/login' : '/api/signup';
+    const res = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { authError.textContent = data.error || 'Something went wrong.'; return; }
+    await onLoggedIn(data.username);
+  } catch (err) {
+    console.error('[auth] caught error:', err.name, err.message, err.stack);
+    authError.textContent = err.name === 'AbortError'
+      ? 'The server took too long to respond. Please try again.'
+      : (err.message || 'Could not connect. Please try again.');
+  } finally {
+    authSubmit.disabled = false;
+    // Reset button text without calling setAuthMode(), which would clear any
+    // error message just set by the catch block.
+    authSubmit.textContent = authMode === 'login' ? 'Log in' : 'Create account';
+  }
+});
+
+// ── Logout ─────────────────────────────────────────────────────────
+logoutBtn.addEventListener('click', async function() {
+  await fetch('/api/logout', { method: 'POST' });
+  conversation = []; xp = 0; xpCapValue = 200; level = 0; currentSubjectLevel = null;
+  wishlistItems = []; wishlistLoaded = false;
+  customSourceType = 'link'; customPhotoData = null;
+  messagesEl.innerHTML = '';
+  updateXpUI();
+  updateWishlistCount();
+  usernameLabel.textContent = '';
+  authUsername.value = ''; authPassword.value = ''; authError.textContent = '';
+  mainApp.style.display = 'none';
+  authOverlay.classList.remove('hidden');
+});
+
+// ── After login / signup ───────────────────────────────────────────
+async function onLoggedIn(username) {
+  usernameLabel.textContent = username;
+  const progressRes = await fetchWithTimeout('/api/progress');
+  if (!progressRes.ok) {
+    let errorMessage = 'Could not load your progress.';
+    try {
+      const errorData = await progressRes.json();
+      errorMessage = errorData.error || errorMessage;
+    } catch (e) { /* keep the useful fallback */ }
+    console.error('[onLoggedIn] /api/progress failed:', errorMessage);
+    throw new Error(errorMessage);
+  }
+  const prog = await progressRes.json();
+
+  xp = prog.xp; level = prog.level;
+  xpCapValue = prog.xp_cap || computeXpCap(level);
+  streakCount.textContent = prog.streak;
+  updateXpUI();
+
+  if (!prog.onboarding_complete) {
+    await startOnboarding();
+  } else {
+    currentSubjectLevel = prog.subject_level;
+    await showMainApp();
+  }
+  authOverlay.classList.add('hidden');
+}
+
+// ── Page load ──────────────────────────────────────────────────────
+(async function init() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) {
+      const data = await res.json();
+      await onLoggedIn(data.username);
+    }
+    // If 401: auth overlay is already visible
+  } catch (e) {
+    authError.textContent = e.message || 'Could not restore your session. Please log in again.';
+  }
+})();
+
+// ── Level UI ───────────────────────────────────────────────────────
+function updateLevelUI() {
+  const label = LEVEL_LABELS[currentSubjectLevel] || 'Math';
+  document.getElementById('scopeTag').textContent = label;
+  document.getElementById('chatTitle').textContent = 'Nova · ' + label + ' guide';
+}
+
+// ── Main app display ───────────────────────────────────────────────
+async function showMainApp() {
+  updateLevelUI();
+  renderFlowchart();
+  await Promise.all([loadHistory(), loadWishlist()]);
+  navigateTo('quest');
+  mainApp.style.display = '';
+  input.focus();
+}
+
+// ── Flowchart renderer ─────────────────────────────────────────────
+function renderFlowchart() {
+  const currentIdx = LEVEL_ORDER.indexOf(currentSubjectLevel);
+  questPath.innerHTML = '';
+
+  LEVEL_ORDER.forEach((lvl, i) => {
+    if (i > 0) {
+      const line = document.createElement('div');
+      line.className = 'path-line';
+      questPath.appendChild(line);
+    }
+
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'node';
+
+    let badge = '';
+    if (i < currentIdx) {
+      node.classList.add('completed');
+      badge = '<span class="done-tag">✓</span>';
+    } else if (i === currentIdx) {
+      node.classList.add('active');
+    } else {
+      node.classList.add('locked');
+      badge = '<span class="soon-tag">Locked</span>';
+    }
+
+    node.innerHTML =
+      `<span class="node-icon" aria-hidden="true">${LEVEL_ICONS[lvl]}</span>` +
+      `<span class="node-label">${LEVEL_LABELS[lvl]}<br><small>${LEVEL_SUBS[lvl]}</small></span>` +
+      badge;
+
+    if (i !== currentIdx) {
+      node.addEventListener('click', () => {
+        const note = i < currentIdx ? ' — already completed.' : ' — not unlocked yet.';
+        toast(LEVEL_LABELS[lvl] + note);
+      });
+    }
+    questPath.appendChild(node);
+  });
+}
+
+// ── Onboarding ─────────────────────────────────────────────────────
+let obQuestions = [];
+let obAnswers = [];
+let obCurrentIdx = 0;
+let obSelectedOption = null;
+
+async function startOnboarding() {
+  obAnswers = []; obCurrentIdx = 0; obSelectedOption = null;
+  obQuestionScreen.style.display = '';
+  obPlacementScreen.style.display = 'none';
+
+  const res = await fetchWithTimeout('/api/onboarding/questions');
+  if (!res.ok) {
+    let errorMessage = 'Could not load the onboarding questions.';
+    try {
+      const errorData = await res.json();
+      errorMessage = errorData.error || errorMessage;
+    } catch (e) { /* keep the useful fallback */ }
+    throw new Error(errorMessage);
+  }
+  const data = await res.json();
+  obQuestions = data.questions;
+
+  onboardingOverlay.classList.remove('hidden');
+  showObQuestion(0);
+}
+
+function showObQuestion(idx) {
+  obCurrentIdx = idx;
+  obSelectedOption = null;
+  const q = obQuestions[idx];
+  const total = obQuestions.length;
+
+  obStep.textContent = `Question ${idx + 1} of ${total}`;
+  obBarFill.style.width = `${(idx / total) * 100}%`;
+  obLevelLabel.textContent = LEVEL_LABELS[q.level] || q.level;
+  obQuestion.textContent = q.question;
+
+  obOptions.innerHTML = '';
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'ob-option';
+    btn.type = 'button';
+    btn.textContent = opt;
+    btn.addEventListener('click', () => selectObOption(i));
+    obOptions.appendChild(btn);
+  });
+
+  obContinue.classList.add('hidden');
+  obContinue.disabled = false;
+}
+
+function selectObOption(i) {
+  obSelectedOption = i;
+  document.querySelectorAll('.ob-option').forEach((btn, idx) => {
+    btn.classList.toggle('selected', idx === i);
+  });
+  obContinue.textContent = obCurrentIdx < obQuestions.length - 1 ? 'Continue →' : 'Submit answers';
+  obContinue.classList.remove('hidden');
+}
+
+obContinue.addEventListener('click', async function() {
+  if (obSelectedOption === null) return;
+  const q = obQuestions[obCurrentIdx];
+  obAnswers.push({ id: q.id, selectedIndex: obSelectedOption });
+
+  if (obCurrentIdx < obQuestions.length - 1) {
+    showObQuestion(obCurrentIdx + 1);
+  } else {
+    obContinue.disabled = true;
+    obContinue.textContent = 'Scoring…';
+    try {
+      const res = await fetch('/api/onboarding/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: obAnswers })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        obContinue.disabled = false;
+        obContinue.textContent = 'Try again';
+        return;
+      }
+      currentSubjectLevel = data.subject_level;
+      placementLevel.textContent = data.label;
+      obQuestionScreen.style.display = 'none';
+      obPlacementScreen.style.display = '';
+    } catch (err) {
+      obContinue.disabled = false;
+      obContinue.textContent = 'Submit answers';
+    }
+  }
+});
+
+startLearningBtn.addEventListener('click', async function() {
+  onboardingOverlay.classList.add('hidden');
+  await showMainApp();
+});
+
+// ── Wishlist ───────────────────────────────────────────────────────
+
+async function loadWishlist() {
+  const res = await fetch('/api/wishlist');
+  if (!res.ok) return;
+  const data = await res.json();
+  wishlistItems = data.items || [];
+  wishlistLoaded = true;
+  renderWishlist();
+  updateWishlistCount();
+  updateWishlistXpUI(data.xp || 0);
+}
+
+function renderWishlist() {
+  wishlistList.innerHTML = '';
+  if (!wishlistItems.length) {
+    wishlistList.innerHTML =
+      '<div class="empty-state">' +
+        '<div class="empty-icon">♡</div>' +
+        '<h2 class="empty-title">Your wishlist is waiting</h2>' +
+        '<p class="empty-copy">Use the form above to request your first reward — Nova will review it.</p>' +
+        '<button class="browse-btn" type="button" id="browseRewardsBtn">Request a reward</button>' +
+      '</div>';
+    document.getElementById('browseRewardsBtn').addEventListener('click', () => {
+      customNoteInput.focus();
+      customWishlistForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return;
+  }
+
+  wishlistItems.forEach(item => {
+    if (item.item_type === 'custom') {
+      const card = document.createElement('article');
+      card.className = 'custom-wishlist-card';
+
+      if (item.photo_data) {
+        const photo = document.createElement('img');
+        photo.className = 'custom-photo-thumb';
+        photo.alt = 'Custom wishlist photo';
+        photo.src = item.photo_data;
+        card.appendChild(photo);
+      } else {
+        const icon = document.createElement('div');
+        icon.className = 'reward-icon';
+        icon.textContent = item.icon;
+        icon.setAttribute('aria-hidden', 'true');
+        card.appendChild(icon);
+      }
+
+      const copy = document.createElement('div');
+      const name = document.createElement('h2');
+      name.className = 'reward-name';
+      name.textContent = item.name;
+      const description = document.createElement('p');
+      description.className = 'reward-description';
+      description.textContent = item.description;
+      const source = document.createElement('p');
+      source.className = 'custom-source';
+      if (item.source_url) {
+        const link = document.createElement('a');
+        link.href = item.source_url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = item.source_url;
+        source.append('Open ', link);
+      } else {
+        source.textContent = 'Uploaded photo';
+      }
+      copy.append(name, description, source);
+
+      const meta = document.createElement('div');
+      meta.className = 'custom-meta';
+      const status = document.createElement('span');
+      const statusText = ['pending', 'approved', 'declined'].includes(item.status) ? item.status : 'pending';
+      status.className = 'status-pill status-' + statusText;
+      status.textContent = statusText;
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'custom-remove-btn';
+      removeButton.textContent = 'Remove';
+      removeButton.addEventListener('click', () => removeCustomWishlistItem(item.wishlist_id));
+      meta.append(status, removeButton);
+
+      card.append(copy, meta);
+      wishlistList.appendChild(card);
+      return;
+    }
+
+    const card = document.createElement('article');
+    card.className = 'wishlist-card';
+
+    const icon = document.createElement('div');
+    icon.className = 'reward-icon';
+    icon.textContent = item.icon;
+    icon.setAttribute('aria-hidden', 'true');
+
+    const copy = document.createElement('div');
+    const name = document.createElement('h2');
+    name.className = 'reward-name';
+    name.textContent = item.name;
+    const description = document.createElement('p');
+    description.className = 'reward-description';
+    description.textContent = item.description;
+    copy.append(name, description);
+
+    const progress = document.createElement('div');
+    progress.className = 'wishlist-progress';
+    const progressLabel = document.createElement('div');
+    progressLabel.className = 'progress-label';
+    const progressText = document.createElement('span');
+    progressText.textContent = 'Progress to unlock';
+    const progressValue = document.createElement('span');
+    progressValue.textContent = Math.min(item.progress_xp, item.cost) + ' / ' + item.cost + ' XP';
+    progressLabel.append(progressText, progressValue);
+    const progressBar = document.createElement('div');
+    progressBar.className = 'reward-progress';
+    progressBar.setAttribute('role', 'progressbar');
+    progressBar.setAttribute('aria-label', 'Progress toward ' + item.name);
+    progressBar.setAttribute('aria-valuemin', '0');
+    progressBar.setAttribute('aria-valuemax', String(item.cost));
+    progressBar.setAttribute('aria-valuenow', String(Math.min(item.progress_xp, item.cost)));
+    const progressFill = document.createElement('div');
+    progressFill.className = 'reward-progress-fill';
+    progressFill.style.width = item.progress_percent + '%';
+    progressBar.appendChild(progressFill);
+    progress.append(progressLabel, progressBar);
+
+    card.append(icon, copy, progress);
+    wishlistList.appendChild(card);
+  });
+}
+
+function updateWishlistCount() {
+  wishlistCount.textContent = wishlistLoaded ? wishlistItems.length : 0;
+}
+
+async function removeCustomWishlistItem(itemId) {
+  try {
+    const res = await fetch('/api/wishlist/custom/' + encodeURIComponent(itemId), { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not remove that item.');
+    await loadWishlist();
+    toast('Custom item removed from your wishlist.');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function updateWishlistXpUI(currentXp) {
+  wishlistXpPill.textContent = currentXp + ' XP available';
+}
+
+// ── History loader ─────────────────────────────────────────────────
+async function loadHistory() {
+  const res = await fetch('/api/history');
+  if (!res.ok) return;
+  const hist = await res.json();
+  messagesEl.innerHTML = '';
+  conversation = [];
+  if (hist.messages && hist.messages.length > 0) {
+    hist.messages.forEach(m =>
+      renderMessage(m.role === 'user' ? 'user' : 'assistant', m.content)
+    );
+    conversation = hist.messages.map(m => ({ role: m.role, content: m.content }));
+  } else {
+    renderMessage('assistant', "Hey, I'm Nova — your " + (LEVEL_LABELS[currentSubjectLevel] || 'Math') + " guide! What would you like to work on today?");
+  }
+}
+
+// ── Chat helpers ───────────────────────────────────────────────────
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMessage(role, text, opts) {
+  opts = opts || {};
+  const el = document.createElement('div');
+  el.className = 'bubble ' + role + (opts.error ? ' error' : '');
+  el.innerHTML = escapeHtml(text).replace(/\n/g,'<br>');
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return el;
+}
+
+function showTyping() {
+  const el = document.createElement('div');
+  el.className = 'bubble assistant typing'; el.id = 'typingBubble';
+  el.innerHTML = '<span></span><span></span><span></span>';
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+function hideTyping() { const t = document.getElementById('typingBubble'); if (t) t.remove(); }
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2600);
+}
+
+// ── Badges ─────────────────────────────────────────────────────────
+// Badge earned state is derived from real progress data (XP / level / streak).
+const BADGE_DEFS = [
+  { icon: '⭐', title: 'First Steps — earn your first XP',
+    earned: () => xp > 0 || level > 0 },
+  { icon: '🚀', title: 'Liftoff — reach Level 2',
+    earned: () => level >= 2 },
+  { icon: '🏆', title: 'On a Roll — keep a 3-day streak',
+    earned: () => (parseInt(streakCount.textContent, 10) || 0) >= 3 }
+];
+
+function renderBadges() {
+  const row = document.getElementById('badgesRow');
+  if (!row) return 0;
+  let earnedCount = 0;
+  row.innerHTML = '';
+  BADGE_DEFS.forEach(def => {
+    const isEarned = def.earned();
+    if (isEarned) earnedCount++;
+    const span = document.createElement('span');
+    span.className = 'badge' + (isEarned ? ' earned' : '');
+    span.title = isEarned ? def.title : 'Locked: ' + def.title;
+    span.textContent = def.icon;
+    row.appendChild(span);
+  });
+  return earnedCount;
+}
+
+function updateMasteryScore() {
+  const completion = Math.min(100, Math.round((xp / xpCapValue) * 100));
+  const progress = Math.min(100, level * 10);
+  const streakDays = parseInt(streakCount.textContent, 10) || 0;
+  const engagement = Math.min(100, streakDays);
+  const badgesEarned = renderBadges();
+  const mastery = Math.min(100, Math.round((badgesEarned / 3) * 100));
+  const score = Math.round((completion + progress + engagement + mastery) / 4);
+  document.getElementById('masteryScore').textContent = score;
+  document.getElementById('masteryInputs').textContent =
+    'Completion ' + completion + ' · Progress ' + progress +
+    ' · Engagement ' + engagement + ' · Mastery ' + mastery;
+}
+
+function updateXpUI() {
+  xpFill.style.width = Math.min(100, Math.round((xp / xpCapValue) * 100)) + '%';
+  xpCaption.textContent = xp + ' / ' + xpCapValue + ' XP';
+  levelReadout.textContent = 'LV ' + level;
+  updateMasteryScore();
+  updateWishlistXpUI(xp);
+  if (wishlistItems.length) {
+    wishlistItems.forEach(item => {
+      item.progress_xp = xp;
+      item.progress_percent = Math.min(100, Math.round((xp / item.cost) * 100));
+    });
+    if (activeView === 'wishlist') renderWishlist();
+  }
+}
+
+// ── Send message ───────────────────────────────────────────────────
+async function sendMessage(text) {
+  conversation.push({ role: 'user', content: text });
+  renderMessage('user', text);
+  input.value = '';
+  input.disabled = true; sendBtn.disabled = true;
+  showTyping();
+
+  try {
+    const res = await fetch('/api/tutor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: 'math', messages: conversation })
+    });
+    const data = await res.json();
+    hideTyping();
+
+    if (!res.ok || data.error) {
+      renderMessage('assistant',
+        data.error || "I'm having trouble connecting right now. Mind trying that again in a moment?",
+        { error: true });
+      return;
+    }
+
+    const finalText = (data.reply || '').trim() ||
+      "Hmm, I didn't quite catch that — could you try asking again?";
+    conversation.push({ role: 'assistant', content: finalText });
+    renderMessage('assistant', finalText);
+
+    // Update XP from server response
+    if (data.progress) {
+      xp = data.progress.xp;
+      level = data.progress.level;
+      xpCapValue = data.progress.xp_cap || computeXpCap(level);
+      updateXpUI();
+      if (data.progress.leveled_up) toast('Level up! Math is now Level ' + level + ' ⭐');
+    }
+
+    // Update flowchart and level label if subject level changed (dev bypass or future logic)
+    const newSubjectLevel = (data.progress && data.progress.subject_level) || data.subject_level;
+    if (newSubjectLevel && newSubjectLevel !== currentSubjectLevel) {
+      currentSubjectLevel = newSubjectLevel;
+      updateLevelUI();
+      renderFlowchart();
+    }
+  } catch (err) {
+    console.error('Nova tutor error:', err);
+    hideTyping();
+    renderMessage('assistant',
+      "I'm having trouble connecting right now. Mind trying that again in a moment?",
+      { error: true });
+  } finally {
+    input.disabled = false; sendBtn.disabled = false; input.focus();
+  }
+}
+
+composer.addEventListener('submit', function(e) {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  sendMessage(text);
+});
+
+resetBtn.addEventListener('click', function() {
+  conversation = [];
+  messagesEl.innerHTML = '';
+  renderMessage('assistant', "New topic — ready when you are. What part of " + (LEVEL_LABELS[currentSubjectLevel] || 'Math') + " do you want to explore?");
+});
+
+memoryBtn.addEventListener('click', function() {
+  window.location.href = '/parent';
+});
+</script>
+
+</body>
+</html>
