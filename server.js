@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const { QUESTIONS, LEVEL_ORDER } = require('./questions');
+const { CURRICULUM } = require('./curriculum');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -98,6 +99,7 @@ async function initDb() {
       onboarding_complete BOOLEAN DEFAULT FALSE,
       updated_at TIMESTAMP DEFAULT NOW()
     );
+    ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS current_topic_index INTEGER DEFAULT 0;
     CREATE TABLE IF NOT EXISTS messages (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -514,11 +516,15 @@ app.get('/api/me', (req, res) => {
 app.get('/api/progress', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT xp, level, streak, subject_level, onboarding_complete FROM user_progress WHERE user_id = $1',
+      'SELECT xp, level, streak, subject_level, onboarding_complete, current_topic_index FROM user_progress WHERE user_id = $1',
       [req.session.userId]
     );
-    const prog = rows[0] || { xp: 0, level: 0, streak: 0, subject_level: null, onboarding_complete: false };
-    res.json({ ...prog, xp_cap: xpCap(prog.level) });
+    const prog = rows[0] || {
+      xp: 0, level: 0, streak: 0, subject_level: null, onboarding_complete: false, current_topic_index: 0
+    };
+    const topics = CURRICULUM[prog.subject_level] || [];
+    const currentTopic = topics[prog.current_topic_index] || null;
+    res.json({ ...prog, xp_cap: xpCap(prog.level), current_topic: currentTopic });
   } catch (err) {
     console.error('Progress error:', err);
     res.status(500).json({ error: 'Could not load progress.' });
@@ -824,7 +830,7 @@ app.post('/api/onboarding/submit', requireAuth, async (req, res) => {
 
   try {
     await pool.query(
-      'UPDATE user_progress SET subject_level = $1, onboarding_complete = true, updated_at = NOW() WHERE user_id = $2',
+      'UPDATE user_progress SET subject_level = $1, onboarding_complete = true, current_topic_index = 0, updated_at = NOW() WHERE user_id = $2',
       [placement, req.session.userId]
     );
     const explanation = await explainPlacement(breakdown, placement);
@@ -873,7 +879,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     } else {
       newLevel = LEVEL_ORDER[currentIdx + 1];
       await pool.query(
-        'UPDATE user_progress SET subject_level = $1, updated_at = NOW() WHERE user_id = $2',
+        'UPDATE user_progress SET subject_level = $1, current_topic_index = 0, updated_at = NOW() WHERE user_id = $2',
         [newLevel, userId]
       );
       reply = `Moving you on to ${LEVEL_LABELS[newLevel]}. Take your time — there's no rush getting comfortable with the new material.`;
