@@ -8,12 +8,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#F8F8F8;
-    --bg-panel:#FFFFFF;
-    --bg-panel-alt:#EDEDED;
+    --bg:#F2ECE0;
+    --bg-panel:#FAF6EF;
+    --bg-panel-alt:#EDE5D4;
     --accent:#D8362A;
     --accent-soft:rgba(216,54,42,0.14);
-    --accent-ink:#F8F8F8;
+    --accent-ink:#FAF6EF;
     --math:#D8362A;
     --science:#9B9B9B;
     --reading:#9B9B9B;
@@ -23,9 +23,10 @@
     --border:#1A1A1A;
     --error:#D8362A;
     --radius:0px;
-    --shadow:4px 4px 0 var(--border);
-    --shadow-sm:3px 3px 0 var(--border);
-    --shadow-xs:2px 2px 0 var(--border);
+    --shadow:4px 4px 0 var(--border), 8px 8px 0 rgba(26,26,26,0.15);
+    --shadow-sm:3px 3px 0 var(--border), 6px 6px 0 rgba(26,26,26,0.15);
+    --shadow-xs:2px 2px 0 var(--border), 4px 4px 0 rgba(26,26,26,0.15);
+    --shadow-accent-xs:2px 2px 0 var(--accent), 4px 4px 0 rgba(216,54,42,0.15);
     --font-display:'Press Start 2P', system-ui, sans-serif;
     --font-body:'Silkscreen', system-ui, sans-serif;
     --font-mono:'Silkscreen', monospace;
@@ -136,7 +137,7 @@
     background:var(--bg-panel);border:3px solid var(--border);
     padding:12px 16px;
     color:var(--text);font-family:var(--font-body);font-size:15px;cursor:pointer;
-    box-shadow:2px 2px 0 var(--border);
+    box-shadow:var(--shadow-xs);
     transition:transform 0.05s,box-shadow 0.05s,background 0.1s;
   }
   .ob-option:hover{background:var(--bg-panel-alt);}
@@ -144,7 +145,7 @@
     border-color:var(--accent);
     background:var(--accent-soft);
     color:var(--text);
-    box-shadow:2px 2px 0 var(--accent);
+    box-shadow:var(--shadow-accent-xs);
   }
   .ob-continue{
     width:100%;padding:13px;border:3px solid var(--border);
@@ -180,11 +181,11 @@
 
   .app-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
   .nova-mark{
-    width:38px;height:38px;
-    background:var(--accent);border:3px solid var(--border);box-shadow:2px 2px 0 var(--border);
+    width:38px;height:38px;padding:6px;
+    background:var(--accent);border:3px solid var(--border);box-shadow:var(--shadow-xs);
     display:flex;align-items:center;justify-content:center;
-    font-size:18px;color:var(--accent-ink);font-weight:400;
   }
+  .nova-sprite{width:100%;height:100%;display:block;}
   .eyebrow{
     font-family:var(--font-display);font-weight:400;font-size:14px;
     margin:0;letter-spacing:0.3px;
@@ -200,7 +201,7 @@
     background:var(--bg-panel);color:var(--text);
     border:2px solid var(--border);
     padding:7px 12px;font-family:var(--font-display);font-size:9px;cursor:pointer;
-    box-shadow:2px 2px 0 var(--border);
+    box-shadow:var(--shadow-xs);
   }
   .logout-btn:hover{background:var(--bg-panel-alt);}
   .logout-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
@@ -241,7 +242,12 @@
   }
   .panel-title{
     font-family:var(--font-display);font-weight:400;font-size:11px;
-    color:var(--text-muted);margin:2px 0 16px;
+    color:var(--text-muted);margin:2px 0 12px;
+    position:relative;padding-bottom:10px;
+  }
+  .panel-title::after{
+    content:'';position:absolute;left:0;bottom:0;
+    width:36px;height:4px;background:var(--accent);
   }
 
   /* Node / flowchart */
@@ -256,7 +262,7 @@
     text-align:left;
     color:var(--text);
     position:relative;
-    box-shadow:2px 2px 0 var(--border);
+    box-shadow:var(--shadow-xs);
   }
   .node .node-icon{font-size:20px;flex-shrink:0;}
   .node .node-label{
@@ -267,7 +273,7 @@
   .node.active{
     background:var(--accent-soft);
     border-color:var(--accent);
-    box-shadow:2px 2px 0 var(--accent);
+    box-shadow:var(--shadow-accent-xs);
   }
   .node.completed{
     opacity:0.85;
@@ -291,19 +297,19 @@
   .chat-panel{display:flex;flex-direction:column;min-height:520px;padding:0;overflow:hidden;}
   .chat-header{
     display:flex;align-items:center;gap:10px;
-    padding:14px 16px;border-bottom:3px solid var(--border);
+    padding:14px 16px;border-bottom:3px solid var(--accent);
   }
   .nova-avatar{
-    width:34px;height:34px;flex-shrink:0;
-    background:var(--accent);border:3px solid var(--border);box-shadow:2px 2px 0 var(--border);
-    display:flex;align-items:center;justify-content:center;font-weight:400;color:var(--accent-ink);
+    width:34px;height:34px;flex-shrink:0;padding:5px;
+    background:var(--accent);border:3px solid var(--border);box-shadow:var(--shadow-xs);
+    display:flex;align-items:center;justify-content:center;
   }
   .chat-title{font-family:var(--font-display);font-weight:400;font-size:12px;margin:0;}
   .chat-sub{font-family:var(--font-body);font-size:13px;color:var(--text-muted);margin:3px 0 0;}
   .reset-btn{
     margin-left:auto;background:var(--bg-panel);color:var(--text);
     border:2px solid var(--border);padding:7px 12px;font-family:var(--font-display);font-size:9px;cursor:pointer;
-    box-shadow:2px 2px 0 var(--border);
+    box-shadow:var(--shadow-xs);
   }
   .reset-btn:hover{background:var(--bg-panel-alt);}
   .reset-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
@@ -315,7 +321,7 @@
   }
   .bubble.assistant{
     background:var(--bg-panel);color:var(--text);
-    align-self:flex-start;box-shadow:3px 3px 0 var(--border);
+    align-self:flex-start;box-shadow:var(--shadow-sm);
   }
   .bubble.assistant::after{
     content:'';position:absolute;top:14px;left:-11px;
@@ -329,7 +335,7 @@
   }
   .bubble.user{
     background:var(--bg-panel-alt);color:var(--text);
-    align-self:flex-end;box-shadow:3px 3px 0 var(--border);
+    align-self:flex-end;box-shadow:var(--shadow-sm);
   }
   .bubble.user::after{
     content:'';position:absolute;top:14px;right:-11px;
@@ -353,7 +359,7 @@
   .bubble.typing span:nth-child(2){animation-delay:0.15s;}
   .bubble.typing span:nth-child(3){animation-delay:0.3s;}
 
-  .composer{display:flex;gap:8px;padding:14px 16px;border-top:3px solid var(--border);}
+  .composer{display:flex;gap:8px;padding:14px 16px;border-top:3px solid var(--accent);}
   .composer input{
     flex:1;background:var(--bg-panel-alt);border:3px solid var(--border);
     padding:11px 16px;color:var(--text);font-family:var(--font-body);font-size:15px;
@@ -362,7 +368,7 @@
   .composer button{
     width:44px;height:44px;border:3px solid var(--border);
     background:var(--accent);color:var(--accent-ink);font-size:16px;font-weight:400;cursor:pointer;flex-shrink:0;
-    box-shadow:2px 2px 0 var(--border);
+    box-shadow:var(--shadow-xs);
   }
   .composer button:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
   .composer button:disabled{opacity:0.5;cursor:default;}
@@ -384,7 +390,7 @@
   }
   .xp-caption{font-family:var(--font-display);font-size:9px;color:var(--text-muted);margin:8px 0 0;}
 
-  .mini-stat{display:flex;align-items:center;font-family:var(--font-body);font-size:14px;padding:8px 4px;border-bottom:2px solid var(--border);}
+  .mini-stat{display:flex;align-items:center;font-family:var(--font-body);font-size:14px;padding:8px 4px;border-bottom:2px solid var(--accent);}
   .mini-stat strong{margin-left:auto;font-family:var(--font-display);font-size:10px;font-weight:400;color:var(--text-muted);}
 
   .mastery-card{
@@ -421,7 +427,7 @@
   .km-node.reading .km-circle{background:var(--reading);}
   .km-node.science .km-circle{background:var(--science);}
   .km-node.math .km-circle{
-    background:var(--math);box-shadow:2px 2px 0 var(--border);
+    background:var(--math);box-shadow:var(--shadow-xs);
   }
   .km-name{font-family:var(--font-body);font-size:13px;font-weight:400;margin-top:8px;text-align:center;max-width:100%;overflow-wrap:break-word;}
   .km-level{font-family:var(--font-display);font-size:8px;color:var(--text-muted);margin-top:3px;text-align:center;max-width:100%;overflow-wrap:break-word;}
@@ -439,13 +445,13 @@
     width:36px;height:36px;display:flex;align-items:center;justify-content:center;
     background:var(--bg-panel);border:2px solid var(--border);font-size:16px;opacity:0.4;
   }
-  .badge.earned{opacity:1;border-color:var(--accent);background:var(--accent-soft);box-shadow:2px 2px 0 var(--accent);}
+  .badge.earned{opacity:1;border-color:var(--accent);background:var(--accent-soft);box-shadow:var(--shadow-accent-xs);}
 
   .visible-note{font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin:4px 0 8px;}
   .memory-btn{
     width:100%;padding:10px;border:2px solid var(--border);
     background:var(--bg-panel);color:var(--text);font-family:var(--font-display);font-size:9px;cursor:pointer;
-    box-shadow:2px 2px 0 var(--border);
+    box-shadow:var(--shadow-xs);
   }
   .memory-btn:hover{background:var(--bg-panel-alt);}
   .memory-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
@@ -512,7 +518,7 @@
   .custom-form-footer{grid-column:2;display:flex;align-items:center;gap:12px;}
   .custom-submit{
     border:2px solid var(--border);padding:11px 15px;background:var(--accent);color:var(--accent-ink);
-    font-family:var(--font-display);font-size:9px;cursor:pointer;box-shadow:2px 2px 0 var(--border);
+    font-family:var(--font-display);font-size:9px;cursor:pointer;box-shadow:var(--shadow-xs);
     transition:transform 0.05s,box-shadow 0.05s,filter 0.1s;
   }
   .custom-submit:hover{filter:brightness(1.06);}
@@ -547,7 +553,7 @@
     background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);padding:18px;
     transition:transform 0.1s,box-shadow 0.1s;
   }
-  .reward-card:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--border);}
+  .reward-card:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--border), 12px 12px 0 rgba(26,26,26,0.15);}
   .reward-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px;}
   .reward-icon{
     width:42px;height:42px;display:flex;align-items:center;justify-content:center;
@@ -574,7 +580,7 @@
   .empty-copy{max-width:360px;margin:0 auto 18px;color:var(--text-muted);font-family:var(--font-body);font-size:14px;line-height:1.6;}
   .browse-btn{
     border:2px solid var(--border);padding:11px 16px;background:var(--accent);color:var(--accent-ink);
-    font-family:var(--font-display);font-size:9px;cursor:pointer;box-shadow:2px 2px 0 var(--border);
+    font-family:var(--font-display);font-size:9px;cursor:pointer;box-shadow:var(--shadow-xs);
     transition:transform 0.05s,box-shadow 0.05s;
   }
   .browse-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
@@ -643,7 +649,7 @@
 <div class="overlay-bg" id="authOverlay">
   <div class="auth-card">
     <div class="auth-brand">
-      <div class="nova-mark" aria-hidden="true">✦</div>
+      <div class="nova-mark" aria-hidden="true"><svg class="nova-sprite" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="3" y="0" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="1" width="4" height="1" fill="#FAF6EF"/><rect x="1" y="2" width="6" height="1" fill="#FAF6EF"/><rect x="0" y="3" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="3" y="3" width="1" height="1" fill="#FAF6EF"/><rect x="4" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="5" y="3" width="3" height="1" fill="#FAF6EF"/><rect x="0" y="4" width="8" height="1" fill="#FAF6EF"/><rect x="1" y="5" width="6" height="1" fill="#FAF6EF"/><rect x="2" y="6" width="4" height="1" fill="#FAF6EF"/><rect x="3" y="7" width="2" height="1" fill="#FAF6EF"/></svg></div>
       <p class="eyebrow">Nova's Quest</p>
     </div>
     <div class="auth-tabs">
@@ -697,7 +703,7 @@
 <!-- ── Main app ──────────────────────────────────────────────────────── -->
 <div class="app" id="mainApp" style="display:none">
   <div class="app-header">
-    <div class="nova-mark" aria-hidden="true">✦</div>
+    <div class="nova-mark" aria-hidden="true"><svg class="nova-sprite" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="3" y="0" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="1" width="4" height="1" fill="#FAF6EF"/><rect x="1" y="2" width="6" height="1" fill="#FAF6EF"/><rect x="0" y="3" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="3" y="3" width="1" height="1" fill="#FAF6EF"/><rect x="4" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="5" y="3" width="3" height="1" fill="#FAF6EF"/><rect x="0" y="4" width="8" height="1" fill="#FAF6EF"/><rect x="1" y="5" width="6" height="1" fill="#FAF6EF"/><rect x="2" y="6" width="4" height="1" fill="#FAF6EF"/><rect x="3" y="7" width="2" height="1" fill="#FAF6EF"/></svg></div>
     <p class="eyebrow">Nova's Quest <span class="scope-tag" id="scopeTag"></span></p>
     <div class="header-right">
       <span class="username-label" id="usernameLabel"></span>
@@ -724,7 +730,7 @@
       <!-- Chat panel -->
       <main class="panel chat-panel" aria-label="Tutor session">
         <div class="chat-header">
-          <div class="nova-avatar" aria-hidden="true">✦</div>
+          <div class="nova-avatar" aria-hidden="true"><svg class="nova-sprite" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="3" y="0" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="1" width="4" height="1" fill="#FAF6EF"/><rect x="1" y="2" width="6" height="1" fill="#FAF6EF"/><rect x="0" y="3" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="3" y="3" width="1" height="1" fill="#FAF6EF"/><rect x="4" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="5" y="3" width="3" height="1" fill="#FAF6EF"/><rect x="0" y="4" width="8" height="1" fill="#FAF6EF"/><rect x="1" y="5" width="6" height="1" fill="#FAF6EF"/><rect x="2" y="6" width="4" height="1" fill="#FAF6EF"/><rect x="3" y="7" width="2" height="1" fill="#FAF6EF"/></svg></div>
           <div>
             <p class="chat-title" id="chatTitle">Nova</p>
             <p class="chat-sub">Live AI tutor</p>
