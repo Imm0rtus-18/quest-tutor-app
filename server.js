@@ -160,28 +160,107 @@ async function addXp(userId, amount) {
   return { xp, level, xp_cap: xpCap(level), leveled_up: leveledUp, subject_level };
 }
 
-// Placement scoring — pure deterministic logic, no LLM.
-function scorePlacement(answers) {
-  const byLevel = {};
+// Shuffle helper (Fisher-Yates) — a real shuffle, different every call, not a
+// fixed alternate pattern.
+function shuffled(array) {
+  const arr = array.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Build a per-level breakdown of what was actually answered right/wrong —
+// matches by option id (stable, shuffle-proof), never by array position.
+// Used both for deterministic placement scoring and for the LLM explanation.
+function buildPerformanceBreakdown(answers) {
+  const breakdown = LEVEL_ORDER.map(level => ({ level, label: LEVEL_LABELS[level], items: [] }));
+  const byLevel = new Map(breakdown.map(b => [b.level, b]));
+
   for (const q of QUESTIONS) {
-    if (!byLevel[q.level]) byLevel[q.level] = [];
     const answer = answers.find(a => a.id === q.id);
-    if (answer !== undefined) {
-      byLevel[q.level].push(answer.selectedIndex === q.correctIndex);
+    const correctOption = q.options.find(o => o.id === q.correctOptionId);
+    const chosenOption = answer ? q.options.find(o => o.id === answer.selectedOptionId) : null;
+    byLevel.get(q.level).items.push({
+      question: q.question,
+      correctAnswer: correctOption ? correctOption.text : null,
+      chosenAnswer: chosenOption ? chosenOption.text : null,
+      correct: !!chosenOption && chosenOption.id === q.correctOptionId
+    });
+  }
+  return breakdown;
+}
+
+// Placement scoring — pure deterministic logic, no LLM. Walks levels in
+// order and places the student at the FIRST level they did not pass (2+ of 3
+// correct = passed), so failing an early level always caps placement there
+// regardless of what happens on later questions. If every level was passed,
+// the last level (precalc) is the ceiling.
+function scorePlacement(breakdown) {
+  for (const levelResult of breakdown) {
+    const correctCount = levelResult.items.filter(item => item.correct).length;
+    if (correctCount < 2) return levelResult.level;
+  }
+  return breakdown[breakdown.length - 1].level;
+}
+
+// One LLM call that writes a short, specific explanation of an already-
+// decided placement — it never influences the placement itself.
+async function explainPlacement(breakdown, placementLevel) {
+  if (!GEMINI_API_KEY) return null;
+
+  const summary = breakdown.map(levelResult => {
+    const correctCount = levelResult.items.filter(item => item.correct).length;
+    const lines = levelResult.items.map(item =>
+      `- "${item.question}" — ${item.correct
+        ? 'answered correctly'
+        : `answered incorrectly (chose "${item.chosenAnswer || 'no answer'}", correct answer was "${item.correctAnswer}")`}`
+    ).join('\n');
+    return `${levelResult.label}: ${correctCount}/3 correct\n${lines}`;
+  }).join('\n\n');
+
+  const systemPrompt = `You are Nova, writing a short placement summary for a student who just finished a math placement test.
+Reference their actual performance — specific topics or question types they got right or wrong — instead of generic praise. Be honest about gaps that led to the placement, while staying warm and encouraging.
+Keep it to 2-3 short sentences.
+Do not use markdown formatting of any kind — no asterisks, no headers, no bullet lists.
+Do not use LaTeX or dollar-sign math notation. Write math in plain text.`;
+
+  const userMessage = `Placement result: ${LEVEL_LABELS[placementLevel]}.
+
+Per-level performance:
+${summary}
+
+Write the explanation now.`;
+
+  try {
+    let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, [{ role: 'user', content: userMessage }]);
+
+    if (!response.ok && isModelUnavailableError(data)) {
+      ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, [{ role: 'user', content: userMessage }]));
     }
-  }
+    if (!response.ok) {
+      console.error('Placement explanation error:', data);
+      return null;
+    }
 
-  // Find the highest level where 2+ of 3 questions were answered correctly.
-  let highestPassed = -1;
-  for (let i = 0; i < LEVEL_ORDER.length; i++) {
-    const results = byLevel[LEVEL_ORDER[i]] || [];
-    const correct = results.filter(Boolean).length;
-    if (correct >= 2) highestPassed = i;
-  }
+    const candidate = (data.candidates || [])[0];
+    if (!candidate) return null;
 
-  if (highestPassed === -1) return LEVEL_ORDER[0];                          // no level passed → algebra1
-  if (highestPassed >= LEVEL_ORDER.length - 1) return LEVEL_ORDER[LEVEL_ORDER.length - 1]; // ceiling: precalc
-  return LEVEL_ORDER[highestPassed + 1];                                     // place in level after highest passed
+    let text = (candidate.content && candidate.content.parts || [])
+      .map(part => part.text || '')
+      .filter(Boolean)
+      .join('\n');
+
+    // Safety-net cleanup (same rule as the tutor route — no markdown/LaTeX).
+    text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+    text = text.replace(/\$\$([^$]+)\$\$/g, '$1').replace(/\$([^$]+)\$/g, '$1');
+
+    return text.trim() || null;
+  } catch (err) {
+    console.error('Placement explanation request failed:', err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -730,10 +809,13 @@ app.get('/api/history', requireAuth, async (req, res) => {
 // Onboarding
 // ---------------------------------------------------------------------------
 
-// Returns questions with correctIndex stripped — never expose answers before submission.
+// Returns questions with correctOptionId stripped and option order shuffled
+// per-request — never expose answers before submission, and never serve the
+// same display order twice.
 app.get('/api/onboarding/questions', requireAuth, (req, res) => {
   const safe = QUESTIONS.map(({ id, level, question, options }) => ({
-    id, level, question, options
+    id, level, question,
+    options: shuffled(options).map(({ id, text }) => ({ id, text }))
   }));
   res.json({ questions: safe });
 });
@@ -744,14 +826,16 @@ app.post('/api/onboarding/submit', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'answers must be an array.' });
   }
 
-  const placement = scorePlacement(answers);
+  const breakdown = buildPerformanceBreakdown(answers);
+  const placement = scorePlacement(breakdown);
 
   try {
     await pool.query(
       'UPDATE user_progress SET subject_level = $1, onboarding_complete = true, updated_at = NOW() WHERE user_id = $2',
       [placement, req.session.userId]
     );
-    res.json({ subject_level: placement, label: LEVEL_LABELS[placement] });
+    const explanation = await explainPlacement(breakdown, placement);
+    res.json({ subject_level: placement, label: LEVEL_LABELS[placement], explanation });
   } catch (err) {
     console.error('Onboarding submit error:', err);
     res.status(500).json({ error: 'Could not save placement. Please try again.' });

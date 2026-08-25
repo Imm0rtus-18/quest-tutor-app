@@ -170,7 +170,10 @@
   }
   .placement-level{
     font-family:var(--font-display);font-weight:800;font-size:28px;
-    color:var(--accent);text-align:center;margin:0 0 24px;
+    color:var(--accent);text-align:center;margin:0 0 16px;
+  }
+  .placement-explanation{
+    font-size:14px;line-height:1.5;color:var(--text-muted);text-align:center;margin:0 0 24px;
   }
 
   /* ── Main app ───────────────────────────────────────────────────── */
@@ -641,6 +644,7 @@
       <p class="placement-title">Assessment complete</p>
       <p class="placement-sub">Based on your answers, you've been placed in:</p>
       <p class="placement-level" id="placementLevel">Geometry</p>
+      <p class="placement-explanation" id="placementExplanation"></p>
       <button class="auth-submit" id="startLearningBtn" type="button">Start learning</button>
     </div>
 
@@ -827,6 +831,7 @@ const obQuestion     = document.getElementById('obQuestion');
 const obOptions      = document.getElementById('obOptions');
 const obContinue     = document.getElementById('obContinue');
 const placementLevel = document.getElementById('placementLevel');
+const placementExplanation = document.getElementById('placementExplanation');
 const startLearningBtn = document.getElementById('startLearningBtn');
 
 const usernameLabel  = document.getElementById('usernameLabel');
@@ -1201,12 +1206,13 @@ function showObQuestion(idx) {
   obQuestion.textContent = q.question;
 
   obOptions.innerHTML = '';
-  q.options.forEach((opt, i) => {
+  q.options.forEach((opt) => {
     const btn = document.createElement('button');
     btn.className = 'ob-option';
     btn.type = 'button';
-    btn.textContent = opt;
-    btn.addEventListener('click', () => selectObOption(i));
+    btn.textContent = opt.text;
+    btn.dataset.optionId = opt.id;
+    btn.addEventListener('click', () => selectObOption(opt.id));
     obOptions.appendChild(btn);
   });
 
@@ -1214,10 +1220,10 @@ function showObQuestion(idx) {
   obContinue.disabled = false;
 }
 
-function selectObOption(i) {
-  obSelectedOption = i;
-  document.querySelectorAll('.ob-option').forEach((btn, idx) => {
-    btn.classList.toggle('selected', idx === i);
+function selectObOption(optionId) {
+  obSelectedOption = optionId;
+  document.querySelectorAll('.ob-option').forEach((btn) => {
+    btn.classList.toggle('selected', btn.dataset.optionId === optionId);
   });
   obContinue.textContent = obCurrentIdx < obQuestions.length - 1 ? 'Continue →' : 'Submit answers';
   obContinue.classList.remove('hidden');
@@ -1226,7 +1232,7 @@ function selectObOption(i) {
 obContinue.addEventListener('click', async function() {
   if (obSelectedOption === null) return;
   const q = obQuestions[obCurrentIdx];
-  obAnswers.push({ id: q.id, selectedIndex: obSelectedOption });
+  obAnswers.push({ id: q.id, selectedOptionId: obSelectedOption });
 
   if (obCurrentIdx < obQuestions.length - 1) {
     showObQuestion(obCurrentIdx + 1);
@@ -1247,6 +1253,7 @@ obContinue.addEventListener('click', async function() {
       }
       currentSubjectLevel = data.subject_level;
       placementLevel.textContent = data.label;
+      placementExplanation.textContent = data.explanation || '';
       obQuestionScreen.style.display = 'none';
       obPlacementScreen.style.display = '';
     } catch (err) {
