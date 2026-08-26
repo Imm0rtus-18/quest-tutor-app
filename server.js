@@ -23,6 +23,15 @@ const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 const BCRYPT_ROUNDS = 12;
 const XP_PER_MESSAGE = 18;
 
+// How much history /api/history returns for the student's own view vs. how
+// much gets sent to Gemini as conversational context. These are deliberately
+// different: the student should never see their history appear to vanish,
+// but Gemini only needs recent turns to keep teaching the current topic well
+// (current_topic in curriculum.js carries the "where are we" context instead
+// of the model needing the student's entire lifetime history).
+const HISTORY_DISPLAY_LIMIT = 200;
+const GEMINI_CONTEXT_MESSAGES = 20;
+
 const LEVEL_LABELS = {
   algebra1: 'Algebra I',
   geometry: 'Geometry',
@@ -135,15 +144,12 @@ function xpCap(level) {
   return Math.round(200 * Math.pow(1.15, level));
 }
 
-// Add XP for a user, handle level-up, persist, return new state.
-async function addXp(userId, amount) {
-  const { rows } = await pool.query(
-    'SELECT xp, level, subject_level FROM user_progress WHERE user_id = $1',
-    [userId]
-  );
-  if (!rows.length) return null;
-
-  let { xp, level, subject_level } = rows[0];
+// Apply an XP delta and persist it, given a row the caller already fetched
+// (e.g. /api/tutor fetches xp/level/subject_level once at the top of the
+// request for system-prompt selection — this reuses that instead of
+// re-querying the same row again later in the same request).
+async function addXp(userId, amount, current) {
+  let { xp, level, subject_level } = current;
   xp += amount;
   let leveledUp = false;
   let cap = xpCap(level);
@@ -236,11 +242,8 @@ ${summary}
 Write the explanation now.`;
 
   try {
-    let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, [{ role: 'user', content: userMessage }]);
+    let { response, data } = await callGeminiWithFallback(systemPrompt, [{ role: 'user', content: userMessage }]);
 
-    if (!response.ok && isModelUnavailableError(data)) {
-      ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, [{ role: 'user', content: userMessage }]));
-    }
     if (!response.ok) {
       console.error('Placement explanation error:', data);
       return null;
@@ -254,9 +257,7 @@ Write the explanation now.`;
       .filter(Boolean)
       .join('\n');
 
-    // Safety-net cleanup (same rule as the tutor route — no markdown/LaTeX).
-    text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
-    text = text.replace(/\$\$([^$]+)\$\$/g, '$1').replace(/\$([^$]+)\$/g, '$1');
+    text = stripMarkdownAndLatex(text);
 
     return text.trim() || null;
   } catch (err) {
@@ -408,6 +409,32 @@ async function callGemini(model, systemPrompt, messages) {
   });
   const data = await response.json();
   return { response, data };
+}
+
+// Calls PRIMARY_MODEL and, if (and only if) it's unavailable, retries once
+// with FALLBACK_MODEL — the one-shot retry shape shared by every Gemini call
+// site in this file. The model names themselves still only ever come from
+// the PRIMARY_MODEL/FALLBACK_MODEL constants above, never chosen here.
+// onFallback, if given, is called with the primary call's failed `data`
+// right before the fallback attempt (used for caller-specific logging).
+async function callGeminiWithFallback(systemPrompt, messages, onFallback) {
+  let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, messages);
+  if (!response.ok && isModelUnavailableError(data)) {
+    if (onFallback) onFallback(data);
+    ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, messages));
+  }
+  return { response, data };
+}
+
+// Safety-net cleanup — strips markdown/LaTeX that slips through despite the
+// system prompt instructing against it (BASE_STYLE and the placement-
+// explanation prompt both say not to use it; the chat UI renders plain text
+// only). Shared by the tutor route and the placement explanation — keep this
+// even though the prompts already say not to use markdown/LaTeX.
+function stripMarkdownAndLatex(text) {
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+  text = text.replace(/\$\$([^$]+)\$\$/g, '$1').replace(/\$([^$]+)\$/g, '$1');
+  return text;
 }
 
 // ---------------------------------------------------------------------------
@@ -794,8 +821,13 @@ app.post('/api/parent/wishlist/:itemId/decision', requireAuth, async (req, res) 
 app.get('/api/history', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT role, content FROM messages WHERE user_id = $1 ORDER BY created_at ASC',
-      [req.session.userId]
+      `SELECT role, content FROM (
+         SELECT role, content, created_at FROM messages
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2
+       ) recent ORDER BY created_at ASC`,
+      [req.session.userId, HISTORY_DISPLAY_LIMIT]
     );
     res.json({ messages: rows });
   } catch (err) {
@@ -904,11 +936,14 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
 
   // ── Normal path ────────────────────────────────────────────────────
   // Ignore the "subject" field from the frontend — read the real placement from DB.
-  const { rows: subjectRows } = await pool.query(
-    'SELECT subject_level FROM user_progress WHERE user_id = $1',
+  // Fetched once here (xp/level included) so addXp() below doesn't have to
+  // re-query the same row again later in the same request.
+  const { rows: progressRows } = await pool.query(
+    'SELECT xp, level, subject_level FROM user_progress WHERE user_id = $1',
     [userId]
   );
-  const subjectLevel = subjectRows[0]?.subject_level || null;
+  const progressRow = progressRows[0] || null;
+  const subjectLevel = progressRow?.subject_level || null;
   if (!subjectLevel) {
     console.warn(`User ${userId} reached /api/tutor with null subject_level — defaulting to algebra1.`);
   }
@@ -923,24 +958,26 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     console.error('Failed to save user message:', err);
   }
 
-  try {
-    let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, messages);
+  // Only the most recent turns go to Gemini — full history is still persisted
+  // above and still returned in full (up to HISTORY_DISPLAY_LIMIT) by
+  // /api/history, this just keeps per-message context/cost/latency bounded.
+  const contextMessages = messages.slice(-GEMINI_CONTEXT_MESSAGES);
 
-    if (!response.ok && isModelUnavailableError(data)) {
+  try {
+    let { response, data } = await callGeminiWithFallback(systemPrompt, contextMessages, (primaryData) => {
       console.warn(
-        `Model "${PRIMARY_MODEL}" is unavailable (${data.error && data.error.message}). ` +
+        `Model "${PRIMARY_MODEL}" is unavailable (${primaryData.error && primaryData.error.message}). ` +
         `Retrying with fallback "${FALLBACK_MODEL}".`
       );
-      ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, messages));
+    });
 
-      if (!response.ok && isModelUnavailableError(data)) {
-        console.error(`Fallback model "${FALLBACK_MODEL}" is also unavailable:`, data);
-        return res.status(503).json({
-          error:
-            'The tutor model is no longer available. Please update the GEMINI_MODEL ' +
-            'environment variable to a current model (e.g. gemini-3.6-flash) and restart the server.'
-        });
-      }
+    if (!response.ok && isModelUnavailableError(data)) {
+      console.error(`Fallback model "${FALLBACK_MODEL}" is also unavailable:`, data);
+      return res.status(503).json({
+        error:
+          'The tutor model is no longer available. Please update the GEMINI_MODEL ' +
+          'environment variable to a current model (e.g. gemini-3.6-flash) and restart the server.'
+      });
     }
 
     if (!response.ok) {
@@ -962,9 +999,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
       .filter(Boolean)
       .join('\n');
 
-    // Safety-net cleanup (unchanged)
-    text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
-    text = text.replace(/\$\$([^$]+)\$\$/g, '$1').replace(/\$([^$]+)\$/g, '$1');
+    text = stripMarkdownAndLatex(text);
 
     let progress = null;
     try {
@@ -972,7 +1007,9 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
         'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
         [userId, 'assistant', text]
       );
-      progress = await addXp(userId, XP_PER_MESSAGE);
+      if (progressRow) {
+        progress = await addXp(userId, XP_PER_MESSAGE, progressRow);
+      }
     } catch (err) {
       console.error('Failed to save assistant message or update XP:', err);
     }
