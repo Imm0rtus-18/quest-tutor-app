@@ -11,6 +11,19 @@ const { CURRICULUM } = require('./curriculum');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+
+// Real channel IDs resolved from each channel's own live YouTube page
+// (externalId / canonical link), not typed from memory — YouTube channel IDs
+// are opaque and unrelated to the channel's @handle, so a guessed or
+// misremembered ID would silently match zero videos forever.
+const REPUTABLE_CHANNELS = [
+  'UC4a-Gbdw7vOaccHmFo40b9g', // Khan Academy
+  'UCoHhuummRZaIVX7bD4t2czg', // Professor Leonard
+  'UCFe6jenM1Bc54qtBsIJGRZQ', // PatrickJMT
+  'UClOR1BiPyOkkIAnv9Cmj4iw', // Mario's Math Tutoring
+  'UCEWpbFLzoYGPfuWUMFPSaoA'  // The Organic Chemistry Tutor
+];
 
 // Primary model — read exclusively from the GEMINI_MODEL env var.
 // Defaults to gemini-3.6-flash, a stable current model on the free tier.
@@ -393,22 +406,33 @@ function isModelUnavailableError(data) {
   return /no longer available|not found|deprecated|model.*unavailable/i.test(msg);
 }
 
-async function callGemini(model, systemPrompt, messages) {
+// Lower-level call that takes an already Gemini-shaped `contents` array
+// directly — used by callGemini() below for the normal text-message path,
+// and directly by the function-calling round trip in /api/tutor, which needs
+// to include raw functionCall/functionResponse parts that toGeminiContents()
+// (plain-text-only) can't represent.
+async function callGeminiRaw(model, systemPrompt, contents, tools) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig: { maxOutputTokens: 1000 }
+  };
+  if (tools) body.tools = tools;
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'x-goog-api-key': GEMINI_API_KEY
     },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: toGeminiContents(messages),
-      generationConfig: { maxOutputTokens: 1000 }
-    })
+    body: JSON.stringify(body)
   });
   const data = await response.json();
   return { response, data };
+}
+
+async function callGemini(model, systemPrompt, messages, tools) {
+  return callGeminiRaw(model, systemPrompt, toGeminiContents(messages), tools);
 }
 
 // Calls PRIMARY_MODEL and, if (and only if) it's unavailable, retries once
@@ -417,11 +441,11 @@ async function callGemini(model, systemPrompt, messages) {
 // the PRIMARY_MODEL/FALLBACK_MODEL constants above, never chosen here.
 // onFallback, if given, is called with the primary call's failed `data`
 // right before the fallback attempt (used for caller-specific logging).
-async function callGeminiWithFallback(systemPrompt, messages, onFallback) {
-  let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, messages);
+async function callGeminiWithFallback(systemPrompt, messages, onFallback, tools) {
+  let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, messages, tools);
   if (!response.ok && isModelUnavailableError(data)) {
     if (onFallback) onFallback(data);
-    ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, messages));
+    ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, messages, tools));
   }
   return { response, data };
 }
@@ -436,6 +460,73 @@ function stripMarkdownAndLatex(text) {
   text = text.replace(/\$\$([^$]+)\$\$/g, '$1').replace(/\$([^$]+)\$/g, '$1');
   return text;
 }
+
+// ---------------------------------------------------------------------------
+// YouTube — reputable-channel video search (used by the search_youtube_video
+// Gemini tool below). search.list only accepts a single channelId per call,
+// which is too restrictive across a 5-channel allowlist, so instead this
+// runs one topic search and filters the results down to allowed channels.
+// ---------------------------------------------------------------------------
+
+async function searchReputableYoutubeVideo(query) {
+  if (!YOUTUBE_API_KEY || !query) return null;
+
+  const url = new URL('https://www.googleapis.com/youtube/v3/search');
+  url.searchParams.set('part', 'snippet');
+  url.searchParams.set('type', 'video');
+  url.searchParams.set('safeSearch', 'strict');
+  url.searchParams.set('maxResults', '10');
+  url.searchParams.set('q', query);
+  url.searchParams.set('key', YOUTUBE_API_KEY);
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('YouTube search error:', data.error || data);
+      return null;
+    }
+
+    const match = (data.items || []).find(
+      item => item.id && item.id.videoId && REPUTABLE_CHANNELS.includes(item.snippet.channelId)
+    );
+    if (!match) return null;
+
+    return {
+      videoId: match.id.videoId,
+      title: match.snippet.title,
+      channelTitle: match.snippet.channelTitle,
+      thumbnail:
+        (match.snippet.thumbnails &&
+          (match.snippet.thumbnails.medium || match.snippet.thumbnails.default) &&
+          (match.snippet.thumbnails.medium || match.snippet.thumbnails.default).url) || null
+    };
+  } catch (err) {
+    console.error('YouTube search request failed:', err);
+    return null;
+  }
+}
+
+// Gemini tool declaration — Nova can call this to find a real video instead
+// of writing out a link itself. The description is the only thing steering
+// when/how the model uses it, since SYSTEM_PROMPTS isn't being touched here.
+const YOUTUBE_SEARCH_TOOL = {
+  functionDeclarations: [{
+    name: 'search_youtube_video',
+    description: 'Search for a short educational video on the current topic from a trusted math education channel.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'A concise search query describing the math topic or concept to find a video about.'
+        }
+      },
+      required: ['query']
+    }
+  }]
+};
 
 // ---------------------------------------------------------------------------
 // Auth routes
@@ -964,12 +1055,16 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   const contextMessages = messages.slice(-GEMINI_CONTEXT_MESSAGES);
 
   try {
-    let { response, data } = await callGeminiWithFallback(systemPrompt, contextMessages, (primaryData) => {
+    const onFallbackWarn = (primaryData) => {
       console.warn(
         `Model "${PRIMARY_MODEL}" is unavailable (${primaryData.error && primaryData.error.message}). ` +
         `Retrying with fallback "${FALLBACK_MODEL}".`
       );
-    });
+    };
+
+    let { response, data } = await callGeminiWithFallback(
+      systemPrompt, contextMessages, onFallbackWarn, [YOUTUBE_SEARCH_TOOL]
+    );
 
     if (!response.ok && isModelUnavailableError(data)) {
       console.error(`Fallback model "${FALLBACK_MODEL}" is also unavailable:`, data);
@@ -987,11 +1082,64 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
       });
     }
 
-    const candidate = (data.candidates || [])[0];
+    let candidate = (data.candidates || [])[0];
 
     if (!candidate) {
       console.error('Gemini returned no candidate:', data.promptFeedback || data);
       return res.json({ reply: "I can't answer that one — let's try a different question." });
+    }
+
+    // ── Function calling: Nova can ask for a real video instead of writing
+    // a link itself. If she does, run the search, hand the real result back
+    // to Gemini, and use its follow-up reply as the actual response.
+    let resource = null;
+    const functionCallPart = (candidate.content && candidate.content.parts || [])
+      .find(part => part.functionCall);
+
+    if (functionCallPart) {
+      const fc = functionCallPart.functionCall;
+      let video = null;
+
+      if (fc.name === 'search_youtube_video') {
+        video = await searchReputableYoutubeVideo((fc.args && fc.args.query) || '');
+      }
+
+      const functionResponsePart = {
+        functionResponse: {
+          name: fc.name,
+          ...(fc.id ? { id: fc.id } : {}),
+          response: { result: video || { found: false } }
+        }
+      };
+
+      const followUpContents = [
+        ...toGeminiContents(contextMessages),
+        candidate.content,
+        { role: 'user', parts: [functionResponsePart] }
+      ];
+
+      let followUp = await callGeminiRaw(PRIMARY_MODEL, systemPrompt, followUpContents, [YOUTUBE_SEARCH_TOOL]);
+      if (!followUp.response.ok && isModelUnavailableError(followUp.data)) {
+        onFallbackWarn(followUp.data);
+        followUp = await callGeminiRaw(FALLBACK_MODEL, systemPrompt, followUpContents, [YOUTUBE_SEARCH_TOOL]);
+      }
+
+      if (followUp.response.ok) {
+        const followCandidate = (followUp.data.candidates || [])[0];
+        if (followCandidate) {
+          candidate = followCandidate;
+          if (video) {
+            resource = {
+              videoId: video.videoId,
+              title: video.title,
+              channelTitle: video.channelTitle,
+              thumbnail: video.thumbnail
+            };
+          }
+        }
+      } else {
+        console.error('Gemini follow-up (post function call) error:', followUp.data);
+      }
     }
 
     let text = (candidate.content && candidate.content.parts || [])
@@ -1014,7 +1162,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
       console.error('Failed to save assistant message or update XP:', err);
     }
 
-    res.json({ reply: text, progress });
+    res.json({ reply: text, progress, resource });
   } catch (err) {
     console.error('Tutor request failed:', err);
     res.status(502).json({ error: 'Could not reach the tutor service. Please try again.' });

@@ -294,7 +294,7 @@
   .path-line{width:3px;height:20px;background:repeating-linear-gradient(var(--border) 0 4px, transparent 4px 8px);}
 
   /* Chat panel */
-  .chat-panel{display:flex;flex-direction:column;min-height:520px;padding:0;overflow:hidden;}
+  .chat-panel{display:flex;flex-direction:column;height:520px;padding:0;overflow:hidden;}
   .chat-header{
     display:flex;align-items:center;gap:10px;
     padding:14px 16px;border-bottom:3px solid var(--accent);
@@ -359,14 +359,38 @@
   .bubble.typing span:nth-child(2){animation-delay:0.15s;}
   .bubble.typing span:nth-child(3){animation-delay:0.3s;}
 
-  .composer{display:flex;gap:8px;padding:14px 16px;border-top:3px solid var(--accent);}
-  .composer input{
-    flex:1;background:var(--bg-panel-alt);border:3px solid var(--border);
-    padding:11px 16px;color:var(--text);font-family:var(--font-body);font-size:15px;
+  .video-card{
+    max-width:78%;align-self:flex-start;display:flex;gap:10px;align-items:center;
+    padding:10px;text-decoration:none;color:var(--text);
+    background:var(--bg-panel-alt);border:3px solid var(--border);box-shadow:var(--shadow-xs);
   }
-  .composer input::placeholder{color:var(--muted);}
+  .video-card:hover{background:var(--accent-soft);}
+  .video-card-thumb{
+    width:80px;height:60px;object-fit:cover;flex-shrink:0;border:2px solid var(--border);
+  }
+  .video-card-thumb-fallback{
+    width:80px;height:60px;flex-shrink:0;border:2px solid var(--border);
+    background:var(--bg-panel);display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-size:16px;color:var(--accent);
+  }
+  .video-card-info{min-width:0;}
+  .video-card-title{
+    font-family:var(--font-body);font-size:14px;line-height:1.4;
+    overflow-wrap:break-word;margin:0 0 4px;
+  }
+  .video-card-channel{
+    font-family:var(--font-display);font-size:9px;color:var(--text-muted);
+  }
+
+  .composer{display:flex;gap:8px;padding:14px 16px;border-top:3px solid var(--accent);}
+  .composer textarea{
+    flex:1;background:var(--bg-panel-alt);border:3px solid var(--border);
+    padding:10px 16px;color:var(--text);font-family:var(--font-body);font-size:15px;
+    line-height:1.5;resize:none;overflow-y:auto;min-height:44px;max-height:168px;
+  }
+  .composer textarea::placeholder{color:var(--muted);}
   .composer button{
-    width:44px;height:44px;border:3px solid var(--border);
+    width:44px;height:44px;border:3px solid var(--border);align-self:flex-end;
     background:var(--accent);color:var(--accent-ink);font-size:16px;font-weight:400;cursor:pointer;flex-shrink:0;
     box-shadow:var(--shadow-xs);
   }
@@ -739,7 +763,7 @@
         </div>
         <div class="messages" id="messages"></div>
         <form class="composer" id="composer">
-          <input id="input" placeholder="Ask Nova a question..." autocomplete="off" />
+          <textarea id="input" rows="1" placeholder="Ask Nova a question..." autocomplete="off"></textarea>
           <button type="submit" aria-label="Send">➔</button>
         </form>
       </main>
@@ -1501,6 +1525,48 @@ function renderMessage(role, text, opts) {
   return el;
 }
 
+// Renders a video card built entirely from the server's `resource` object —
+// never from anything parsed out of Nova's reply text.
+function renderVideoCard(resource) {
+  if (!resource || !resource.videoId) return;
+
+  const card = document.createElement('a');
+  card.className = 'video-card';
+  card.href = 'https://youtube.com/watch?v=' + encodeURIComponent(resource.videoId);
+  card.target = '_blank';
+  card.rel = 'noopener noreferrer';
+
+  if (resource.thumbnail) {
+    const thumb = document.createElement('img');
+    thumb.className = 'video-card-thumb';
+    thumb.src = resource.thumbnail;
+    thumb.alt = '';
+    card.appendChild(thumb);
+  } else {
+    const thumbFallback = document.createElement('div');
+    thumbFallback.className = 'video-card-thumb-fallback';
+    thumbFallback.textContent = '▶';
+    card.appendChild(thumbFallback);
+  }
+
+  const info = document.createElement('div');
+  info.className = 'video-card-info';
+
+  const title = document.createElement('div');
+  title.className = 'video-card-title';
+  title.textContent = resource.title || 'Watch on YouTube';
+  info.appendChild(title);
+
+  const channel = document.createElement('div');
+  channel.className = 'video-card-channel';
+  channel.textContent = resource.channelTitle || '';
+  info.appendChild(channel);
+
+  card.appendChild(info);
+  messagesEl.appendChild(card);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
 function showTyping() {
   const el = document.createElement('div');
   el.className = 'bubble assistant typing'; el.id = 'typingBubble';
@@ -1580,6 +1646,7 @@ async function sendMessage(text) {
   conversation.push({ role: 'user', content: text });
   renderMessage('user', text);
   input.value = '';
+  autoResizeInput();
   input.disabled = true; sendBtn.disabled = true;
   showTyping();
 
@@ -1603,6 +1670,7 @@ async function sendMessage(text) {
       "Hmm, I didn't quite catch that — could you try asking again?";
     conversation.push({ role: 'assistant', content: finalText });
     renderMessage('assistant', finalText);
+    renderVideoCard(data.resource);
 
     // Update XP from server response
     if (data.progress) {
@@ -1630,6 +1698,22 @@ async function sendMessage(text) {
     input.disabled = false; sendBtn.disabled = false; input.focus();
   }
 }
+
+// ── Composer auto-grow (single line → ~7-8 lines, then scrolls) ────
+const INPUT_MAX_HEIGHT = 168;
+function autoResizeInput() {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, INPUT_MAX_HEIGHT) + 'px';
+}
+input.addEventListener('input', autoResizeInput);
+
+// Enter sends; Shift+Enter inserts a newline.
+input.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    composer.requestSubmit();
+  }
+});
 
 composer.addEventListener('submit', function(e) {
   e.preventDefault();
