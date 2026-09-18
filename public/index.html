@@ -177,7 +177,7 @@
   }
 
   /* ── Main app ───────────────────────────────────────────────────── */
-  .app{max-width:1180px;margin:0 auto;padding:22px 20px 40px;}
+  .app{max-width:1400px;margin:0 auto;padding:22px 24px 40px;}
 
   .app-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
   .nova-mark{
@@ -238,15 +238,15 @@
 
   .panels{
     display:grid;
-    grid-template-columns:250px 1fr 250px;
-    gap:16px;
+    grid-template-columns:300px 1fr 300px;
+    gap:22px;
     align-items:start;
   }
   .panel{
     background:var(--bg-panel);
     border:3px solid var(--border);
     box-shadow:var(--shadow);
-    padding:16px;
+    padding:22px;
   }
   .panel-title{
     font-family:var(--font-display);font-weight:400;font-size:11px;
@@ -325,7 +325,7 @@
   .lesson-map-empty{font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin-top:8px;}
 
   /* Chat panel */
-  .chat-panel{display:flex;flex-direction:column;height:520px;padding:0;overflow:hidden;}
+  .chat-panel{display:flex;flex-direction:column;height:580px;padding:0;overflow:hidden;}
   .chat-header{
     display:flex;align-items:center;gap:10px;
     padding:14px 16px;border-bottom:3px solid var(--accent);
@@ -345,7 +345,22 @@
   .reset-btn:hover{background:var(--bg-panel-alt);}
   .reset-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
 
-  .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;}
+  .conv-tabs{
+    display:flex;gap:6px;overflow-x:auto;
+    padding:8px 12px;border-bottom:2px solid var(--border);
+    background:var(--bg-panel-alt);
+  }
+  .conv-tabs:empty{display:none;}
+  .conv-tab{
+    flex-shrink:0;white-space:nowrap;
+    background:var(--bg-panel);color:var(--text-muted);
+    border:2px solid var(--border);padding:5px 10px;
+    font-family:var(--font-body);font-size:12px;cursor:pointer;
+  }
+  .conv-tab:hover{background:var(--bg-panel-alt);color:var(--text);}
+  .conv-tab.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+
+  .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
   .bubble{
     max-width:78%;padding:12px 15px;font-family:var(--font-body);font-size:15px;line-height:1.6;
     position:relative;border:3px solid var(--border);
@@ -472,11 +487,14 @@
     font-family:var(--font-display);font-size:9px;letter-spacing:1px;
     text-transform:uppercase;color:var(--text-muted);margin:0 0 12px;
   }
-  .km-path{display:flex;align-items:flex-start;}
-  .km-node{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;}
-  .km-node.math{flex:0 1 auto;min-width:0;}
+  /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
+     squeezed the Math node until overflow-wrap broke subject names
+     mid-word ("MA/TH"). A vertical list, like the .mini-stat rows just
+     below it, has no width to run out of. */
+  .km-path{display:flex;flex-direction:column;gap:10px;}
+  .km-node{display:flex;align-items:center;gap:10px;}
   .km-circle{
-    width:20px;height:20px;flex-shrink:0;
+    width:16px;height:16px;flex-shrink:0;
     border:2px solid var(--border);background:var(--bg-panel);
   }
   .km-node.reading .km-circle{background:var(--reading);}
@@ -484,13 +502,8 @@
   .km-node.math .km-circle{
     background:var(--math);box-shadow:var(--shadow-xs);
   }
-  .km-name{font-family:var(--font-body);font-size:13px;font-weight:400;margin-top:8px;text-align:center;max-width:100%;overflow-wrap:break-word;}
-  .km-level{font-family:var(--font-display);font-size:8px;color:var(--text-muted);margin-top:3px;text-align:center;max-width:100%;overflow-wrap:break-word;}
-  .km-line{
-    flex:1;height:2px;margin-top:9px;
-    background:var(--border);
-    min-width:14px;
-  }
+  .km-name{font-family:var(--font-body);font-size:14px;font-weight:400;white-space:nowrap;}
+  .km-level{margin-left:auto;font-family:var(--font-display);font-size:9px;color:var(--text-muted);white-space:nowrap;}
   .streak{margin-top:12px;font-family:var(--font-body);font-size:14px;font-weight:400;}
   .streak strong{font-family:var(--font-display);font-size:11px;color:var(--accent);}
 
@@ -684,7 +697,7 @@
     .bubble.typing span{animation:none;}
     .confetti-piece{animation:none;opacity:0;}
   }
-  @media (max-width:880px){
+  @media (max-width:1024px){
     .panels{grid-template-columns:1fr;}
     .path{flex-direction:row;overflow-x:auto;padding-bottom:4px;}
     .node{min-width:150px;}
@@ -810,6 +823,7 @@
           </div>
           <button class="reset-btn" id="resetBtn" type="button">New topic</button>
         </div>
+        <div class="conv-tabs" id="conversationTabs" aria-label="Past conversations"></div>
         <div class="messages" id="messages"></div>
         <form class="composer" id="composer">
           <textarea id="input" rows="1" placeholder="Ask Nova a question..." autocomplete="off"></textarea>
@@ -842,13 +856,11 @@
               <span class="km-name">Reading</span>
               <span class="km-level">Grade 5</span>
             </div>
-            <div class="km-line"></div>
             <div class="km-node science">
               <div class="km-circle"></div>
               <span class="km-name">Science</span>
               <span class="km-level">Grade 8</span>
             </div>
-            <div class="km-line"></div>
             <div class="km-node math">
               <div class="km-circle"></div>
               <span class="km-name">Math</span>
@@ -1003,6 +1015,8 @@ let wishlistLoaded = false;
 let lessonTopics = [];
 let currentTopicIndex = 0;
 let currentTopicObj = null;
+let conversations = [];
+let activeConversationId = null;
 let awaitingReply = false;
 let idleTimer = null;
 const ORIGINAL_TAB_TITLE = document.title;
@@ -1305,7 +1319,7 @@ async function showMainApp() {
   updateLevelUI();
   renderFlowchart();
   renderLessonMap();
-  await Promise.all([loadHistory(), loadWishlist()]);
+  await Promise.all([loadConversations(), loadWishlist()]);
   navigateTo('quest');
   mainApp.style.display = '';
   input.focus();
@@ -1663,9 +1677,13 @@ function updateWishlistXpUI(currentXp) {
   wishlistXpPill.textContent = currentXp + ' XP available';
 }
 
-// ── History loader ─────────────────────────────────────────────────
-async function loadHistory() {
-  const res = await fetch('/api/history');
+// ── Conversations ──────────────────────────────────────────────────
+// Loads a specific conversation's history into the chat panel. Reused both
+// for the initial load and for switching tabs — an empty conversation
+// (brand new, or freshly created by "New topic") gets the same welcome +
+// auto-triggered lesson start treatment either way.
+async function loadConversationHistory(conversationId) {
+  const res = await fetch('/api/history?conversation_id=' + encodeURIComponent(conversationId));
   if (!res.ok) return;
   const hist = await res.json();
   messagesEl.innerHTML = '';
@@ -1682,10 +1700,87 @@ async function loadHistory() {
       : "Hey, I'm Nova — your " + levelLabel + " guide! What would you like to work on today?";
     renderMessage('assistant', welcome);
 
-    // First-ever session: kick off a real lesson automatically, without
+    // Empty conversation: kick off a real lesson automatically, without
     // waiting for the student to type first.
     setTimeout(() => sendAutoTrigger('start_lesson'), 2500);
   }
+}
+
+// Loads the student's conversation list, picks the most recent as active
+// (creating a first one for a brand-new account with none yet), and loads
+// its history.
+async function loadConversations() {
+  const res = await fetch('/api/conversations');
+  if (!res.ok) return;
+  const data = await res.json();
+  conversations = data.conversations || [];
+
+  if (!conversations.length) {
+    const createRes = await fetch('/api/conversations', { method: 'POST' });
+    if (createRes.ok) {
+      const created = await createRes.json();
+      conversations = [created.conversation];
+    }
+  }
+
+  activeConversationId = conversations.length ? conversations[0].id : null;
+  renderConversationList();
+  if (activeConversationId) await loadConversationHistory(activeConversationId);
+}
+
+function renderConversationList() {
+  const list = document.getElementById('conversationTabs');
+  if (!list) return;
+  list.innerHTML = '';
+  conversations.forEach(conv => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'conv-tab' + (conv.id === activeConversationId ? ' active' : '');
+    btn.textContent = conv.title || 'Conversation';
+    btn.addEventListener('click', () => switchConversation(conv.id));
+    list.appendChild(btn);
+  });
+}
+
+async function switchConversation(id) {
+  if (id === activeConversationId) return;
+  if (awaitingReply) { toast("Nova's still replying — one sec."); return; }
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  activeConversationId = id;
+  renderConversationList();
+  await loadConversationHistory(id);
+  resetIdleTimer();
+}
+
+// Starts a genuinely new, separate conversation — does not touch or hide
+// any earlier ones.
+async function startNewConversation() {
+  if (awaitingReply) { toast("Nova's still replying — one sec."); return; }
+  try {
+    const res = await fetch('/api/conversations', { method: 'POST' });
+    if (!res.ok) throw new Error('Could not start a new conversation.');
+    const data = await res.json();
+    conversations.unshift(data.conversation);
+    activeConversationId = data.conversation.id;
+    renderConversationList();
+  } catch (err) {
+    toast(err.message || 'Could not start a new conversation.');
+    return;
+  }
+
+  playClickBlip();
+  conversation = [];
+  messagesEl.innerHTML = '';
+  const levelLabel = LEVEL_LABELS[currentSubjectLevel] || 'Math';
+  const welcome = currentTopicObj
+    ? "New topic — let's dive into " + currentTopicObj.title + "."
+    : "New topic — ready when you are. What part of " + levelLabel + " do you want to explore?";
+  renderMessage('assistant', welcome);
+  resetIdleTimer();
+  // Like the very first login, don't make the student type first —
+  // start a real lesson automatically.
+  setTimeout(() => sendAutoTrigger('start_lesson'), 2500);
 }
 
 // ── Chat helpers ───────────────────────────────────────────────────
@@ -1895,11 +1990,17 @@ async function sendAutoTrigger(trigger) {
     const res = await fetch('/api/tutor', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: 'math', messages: conversation, trigger })
+      body: JSON.stringify({ subject: 'math', messages: conversation, trigger, conversation_id: activeConversationId })
     });
     const data = await res.json();
     hideTyping();
-    if (!res.ok || data.error) return;
+
+    if (!res.ok || data.error) {
+      renderMessage('assistant',
+        data.error || "I'm having trouble connecting right now. Mind trying that again in a moment?",
+        { error: true });
+      return;
+    }
 
     const finalText = (data.reply || '').trim();
     if (finalText) {
@@ -1911,8 +2012,11 @@ async function sendAutoTrigger(trigger) {
     }
     applyTopicAdjustment(data.topic_adjustment);
   } catch (err) {
-    hideTyping();
     console.error('Nova auto-trigger error:', err);
+    hideTyping();
+    renderMessage('assistant',
+      "I'm having trouble connecting right now. Mind trying that again in a moment?",
+      { error: true });
   } finally {
     awaitingReply = false;
     resetIdleTimer();
@@ -1936,7 +2040,7 @@ async function sendMessage(text) {
     const res = await fetch('/api/tutor', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: 'math', messages: conversation })
+      body: JSON.stringify({ subject: 'math', messages: conversation, conversation_id: activeConversationId })
     });
     const data = await res.json();
     hideTyping();
@@ -2015,10 +2119,7 @@ composer.addEventListener('submit', function(e) {
 });
 
 resetBtn.addEventListener('click', function() {
-  conversation = [];
-  messagesEl.innerHTML = '';
-  renderMessage('assistant', "New topic — ready when you are. What part of " + (LEVEL_LABELS[currentSubjectLevel] || 'Math') + " do you want to explore?");
-  resetIdleTimer();
+  startNewConversation();
 });
 
 memoryBtn.addEventListener('click', function() {

@@ -130,6 +130,30 @@ async function initDb() {
       content TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS conversations (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE;
+    -- One-time backfill: any pre-existing messages with no conversation_id
+    -- (from before conversations existed) get bundled into one "Earlier
+    -- conversation" per user, so nothing is lost. Naturally idempotent —
+    -- once every message has a conversation_id, the INSERT's SELECT (and
+    -- therefore the UPDATE) finds nothing to do on later startups.
+    WITH backfill AS (
+      INSERT INTO conversations (user_id, title, created_at)
+      SELECT user_id, 'Earlier conversation', MIN(created_at)
+      FROM messages
+      WHERE conversation_id IS NULL
+      GROUP BY user_id
+      RETURNING id, user_id
+    )
+    UPDATE messages m
+    SET conversation_id = b.id
+    FROM backfill b
+    WHERE m.conversation_id IS NULL AND m.user_id = b.user_id;
     CREATE TABLE IF NOT EXISTS wishlist_items (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES user_progress(user_id) ON DELETE CASCADE,
@@ -1023,16 +1047,58 @@ app.post('/api/parent/wishlist/:itemId/decision', requireAuth, async (req, res) 
   }
 });
 
-app.get('/api/history', requireAuth, async (req, res) => {
+// ---------------------------------------------------------------------------
+// Conversations
+// ---------------------------------------------------------------------------
+
+app.get('/api/conversations', requireAuth, async (req, res) => {
   try {
+    const { rows } = await pool.query(
+      'SELECT id, title, created_at FROM conversations WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.session.userId]
+    );
+    res.json({ conversations: rows });
+  } catch (err) {
+    console.error('Conversations list error:', err);
+    res.status(500).json({ error: 'Could not load conversations.' });
+  }
+});
+
+app.post('/api/conversations', requireAuth, async (req, res) => {
+  try {
+    // Dated title (e.g. "Sep 17, 2:34 PM") — simplest option that needs no
+    // later rename once a "first topic" is known.
+    const title = new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
+    const { rows } = await pool.query(
+      'INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING id, title, created_at',
+      [req.session.userId, title]
+    );
+    res.status(201).json({ conversation: rows[0] });
+  } catch (err) {
+    console.error('Create conversation error:', err);
+    res.status(500).json({ error: 'Could not start a new conversation.' });
+  }
+});
+
+app.get('/api/history', requireAuth, async (req, res) => {
+  const conversationId = parseInt(req.query.conversation_id, 10);
+  if (!Number.isInteger(conversationId)) {
+    return res.status(400).json({ error: 'A conversation_id is required.' });
+  }
+  try {
+    // Filtering by both user_id and conversation_id together means a
+    // conversation_id belonging to another user simply matches nothing —
+    // no separate ownership check needed for this read.
     const { rows } = await pool.query(
       `SELECT role, content FROM (
          SELECT role, content, created_at FROM messages
-         WHERE user_id = $1
+         WHERE user_id = $1 AND conversation_id = $2
          ORDER BY created_at DESC
-         LIMIT $2
+         LIMIT $3
        ) recent ORDER BY created_at ASC`,
-      [req.session.userId, HISTORY_DISPLAY_LIMIT]
+      [req.session.userId, conversationId, HISTORY_DISPLAY_LIMIT]
     );
     res.json({ messages: rows });
   } catch (err) {
@@ -1089,7 +1155,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     });
   }
 
-  const { messages, subject, trigger } = req.body || {};
+  const { messages, subject, trigger, conversation_id } = req.body || {};
 
   // Auto-triggers ('start_lesson' right after the welcome message,
   // 'idle_continue' after a quiet spell) carry no new real user text — the
@@ -1102,6 +1168,22 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   }
 
   const userId = req.session.userId;
+  const conversationId = parseInt(conversation_id, 10);
+  if (!Number.isInteger(conversationId)) {
+    return res.status(400).json({ error: 'A conversation_id is required.' });
+  }
+
+  // Writes (unlike the /api/history read) need an explicit ownership check —
+  // otherwise a client could pass another user's conversation_id and have
+  // their message inserted into someone else's thread.
+  const { rows: convCheckRows } = await pool.query(
+    'SELECT id FROM conversations WHERE id = $1 AND user_id = $2',
+    [conversationId, userId]
+  );
+  if (!convCheckRows.length) {
+    return res.status(404).json({ error: 'Conversation not found.' });
+  }
+
   const userMsg = isAutoTrigger ? null : messages[messages.length - 1];
 
   // ── Developer bypass — "next level please" ─────────────────────────
@@ -1131,12 +1213,12 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     // Save the bypass exchange to history for session continuity.
     try {
       await pool.query(
-        'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
-        [userId, 'user', userMsg.content]
+        'INSERT INTO messages (user_id, conversation_id, role, content) VALUES ($1, $2, $3, $4)',
+        [userId, conversationId, 'user', userMsg.content]
       );
       await pool.query(
-        'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
-        [userId, 'assistant', reply]
+        'INSERT INTO messages (user_id, conversation_id, role, content) VALUES ($1, $2, $3, $4)',
+        [userId, conversationId, 'assistant', reply]
       );
     } catch (err) {
       console.error('Failed to save bypass messages:', err);
@@ -1172,8 +1254,8 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   if (!isAutoTrigger) {
     try {
       await pool.query(
-        'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
-        [userId, 'user', userMsg.content]
+        'INSERT INTO messages (user_id, conversation_id, role, content) VALUES ($1, $2, $3, $4)',
+        [userId, conversationId, 'user', userMsg.content]
       );
     } catch (err) {
       console.error('Failed to save user message:', err);
@@ -1184,11 +1266,19 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   // above and still returned in full (up to HISTORY_DISPLAY_LIMIT) by
   // /api/history, this just keeps per-message context/cost/latency bounded.
   let contextMessages = messages.slice(-GEMINI_CONTEXT_MESSAGES);
-  if (isAutoTrigger && contextMessages.length === 0) {
-    // Gemini needs at least one contents turn. This placeholder is never
-    // persisted to the messages table or shown to the student — the real
-    // instruction for what to actually say lives in systemPrompt above.
-    contextMessages = [{ role: 'user', content: '(internal trigger — no visible student message)' }];
+  if (isAutoTrigger) {
+    // Gemini rejects any request whose contents end on a model/assistant
+    // turn ("Requests ending with a model turn are not supported") — and
+    // after the first exchange, contextMessages is never empty, it just
+    // often ends in Nova's last reply. So auto-triggers always need a
+    // synthetic trailing user turn, not just when history is empty. This
+    // placeholder is never persisted to the messages table or shown to the
+    // student — the real instruction for what to actually say lives in
+    // systemPrompt above.
+    contextMessages = [
+      ...contextMessages,
+      { role: 'user', content: '(internal trigger — see system prompt instruction)' }
+    ];
   }
 
   try {
@@ -1303,8 +1393,8 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     let progress = null;
     try {
       await pool.query(
-        'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
-        [userId, 'assistant', text]
+        'INSERT INTO messages (user_id, conversation_id, role, content) VALUES ($1, $2, $3, $4)',
+        [userId, conversationId, 'assistant', text]
       );
       // Auto-triggers aren't a real student message, so they don't earn XP —
       // same no-XP treatment as the "next level please" dev bypass.
