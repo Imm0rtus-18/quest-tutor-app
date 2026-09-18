@@ -205,6 +205,14 @@
   }
   .logout-btn:hover{background:var(--bg-panel-alt);}
   .logout-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+  .sound-toggle{
+    background:var(--bg-panel);color:var(--text);
+    border:2px solid var(--border);
+    width:32px;height:32px;font-size:14px;line-height:1;cursor:pointer;
+    box-shadow:var(--shadow-xs);
+  }
+  .sound-toggle:hover{background:var(--bg-panel-alt);}
+  .sound-toggle:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
 
   .page-nav{
     display:flex;gap:8px;align-items:center;
@@ -292,6 +300,29 @@
     border:2px solid var(--border);padding:2px 6px;background:var(--accent);
   }
   .path-line{width:3px;height:20px;background:repeating-linear-gradient(var(--border) 0 4px, transparent 4px 8px);}
+
+  /* Lesson map (topics within the current subject level) */
+  .lesson-map{width:100%;margin-top:14px;}
+  .lesson-map-summary{
+    cursor:pointer;list-style:none;
+    display:flex;align-items:center;justify-content:space-between;
+    font-family:var(--font-display);font-size:9px;color:var(--text-muted);
+    padding:8px 0;border-top:3px solid var(--border);
+  }
+  .lesson-map-summary::-webkit-details-marker{display:none;}
+  .lesson-map-summary::after{content:'▸';font-family:var(--font-body);font-size:13px;transition:transform 0.15s;}
+  .lesson-map[open] .lesson-map-summary::after{transform:rotate(90deg);}
+  .lesson-map-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+  .lesson-node{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    background:var(--bg-panel-alt);border:2px solid var(--border);
+    padding:7px 10px;box-shadow:var(--shadow-xs);
+  }
+  .lesson-node-label{font-family:var(--font-body);font-size:13px;color:var(--text);}
+  .lesson-node.active{background:var(--accent-soft);border-color:var(--accent);box-shadow:var(--shadow-accent-xs);}
+  .lesson-node.completed{opacity:0.8;background:var(--bg-panel);}
+  .lesson-node.upcoming{opacity:0.5;}
+  .lesson-map-empty{font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin-top:8px;}
 
   /* Chat panel */
   .chat-panel{display:flex;flex-direction:column;height:520px;padding:0;overflow:hidden;}
@@ -635,10 +666,23 @@
   }
   .toast.show{opacity:1;transform:translate(-50%, 0);}
 
+  /* Celebration confetti burst (level-up / topic-complete / level advance) */
+  .confetti-burst{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;z-index:9999;}
+  .confetti-piece{
+    position:fixed;width:7px;height:7px;border:1px solid var(--border);
+    transform:translate(-50%,-50%);
+    animation:confetti-fly 1.2s ease-out forwards;
+  }
+  @keyframes confetti-fly{
+    0%{transform:translate(-50%,-50%) rotate(0deg);opacity:1;}
+    100%{transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(360deg);opacity:0;}
+  }
+
   @keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:0.5;}40%{transform:translateY(-4px);opacity:1;}}
 
   @media (prefers-reduced-motion:reduce){
     .bubble.typing span{animation:none;}
+    .confetti-piece{animation:none;opacity:0;}
   }
   @media (max-width:880px){
     .panels{grid-template-columns:1fr;}
@@ -731,6 +775,7 @@
     <p class="eyebrow">Nova's Quest <span class="scope-tag" id="scopeTag"></span></p>
     <div class="header-right">
       <span class="username-label" id="usernameLabel"></span>
+      <button class="sound-toggle" id="soundToggle" type="button" aria-label="Mute sound effects" title="Sound effects">🔊</button>
       <button class="logout-btn" id="logoutBtn" type="button">Log out</button>
     </div>
   </div>
@@ -749,6 +794,10 @@
       <aside class="panel" aria-label="Math track">
         <p class="panel-title">Math track</p>
         <div class="path" id="questPath"></div>
+        <details class="lesson-map" id="lessonMap">
+          <summary class="lesson-map-summary">Lesson map</summary>
+          <div class="lesson-map-list" id="lessonMapList"></div>
+        </details>
       </aside>
 
       <!-- Chat panel -->
@@ -908,12 +957,14 @@ const placementExplanation = document.getElementById('placementExplanation');
 const startLearningBtn = document.getElementById('startLearningBtn');
 
 const usernameLabel  = document.getElementById('usernameLabel');
+const soundToggle    = document.getElementById('soundToggle');
 const logoutBtn      = document.getElementById('logoutBtn');
 const questPath      = document.getElementById('questPath');
 const messagesEl     = document.getElementById('messages');
 const composer       = document.getElementById('composer');
 const input          = document.getElementById('input');
 const sendBtn        = composer.querySelector('button[type="submit"]');
+sendBtn.addEventListener('click', playClickBlip);
 const resetBtn       = document.getElementById('resetBtn');
 const xpFill         = document.getElementById('xpFill');
 const xpCaption      = document.getElementById('xpCaption');
@@ -949,10 +1000,68 @@ let wishlistItems = [];
 let customSourceType = 'link';
 let customPhotoData = null;
 let wishlistLoaded = false;
+let lessonTopics = [];
+let currentTopicIndex = 0;
+let currentTopicObj = null;
+let awaitingReply = false;
+let idleTimer = null;
+const ORIGINAL_TAB_TITLE = document.title;
+
+// ── Sound effects (Web Audio API — synthesized, no audio files) ────
+let soundEnabled = true;
+try { soundEnabled = localStorage.getItem('novaSoundEnabled') !== 'off'; } catch (e) { /* private mode etc. — default on */ }
+
+let audioCtx = null;
+function getAudioCtx() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) audioCtx = new Ctx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// Schedules one short square-wave beep. delay/duration are in seconds.
+function playTone(freq, delay, duration, volume) {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  const startTime = ctx.currentTime + delay;
+  gain.gain.setValueAtTime(volume, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+function playClickBlip() { playTone(660, 0, 0.05, 0.04); }
+function playReplyTone() { playTone(880, 0, 0.09, 0.04); }
+// Short ascending 3-note jingle for level-up / topic-complete.
+function playCelebrationJingle() {
+  playTone(523.25, 0, 0.12, 0.05);
+  playTone(659.25, 0.12, 0.12, 0.05);
+  playTone(783.99, 0.24, 0.2, 0.05);
+}
+
+function updateSoundToggleUI() {
+  soundToggle.textContent = soundEnabled ? '🔊' : '🔇';
+  soundToggle.setAttribute('aria-label', soundEnabled ? 'Mute sound effects' : 'Unmute sound effects');
+}
+soundToggle.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  try { localStorage.setItem('novaSoundEnabled', soundEnabled ? 'on' : 'off'); } catch (e) { /* non-critical */ }
+  updateSoundToggleUI();
+});
+updateSoundToggleUI();
 
 // ── App navigation ─────────────────────────────────────────────────
-questNavBtn.addEventListener('click', () => navigateTo('quest'));
+questNavBtn.addEventListener('click', () => { playClickBlip(); navigateTo('quest'); });
 wishlistNavBtn.addEventListener('click', async () => {
+  playClickBlip();
   navigateTo('wishlist');
   await loadWishlist();
 });
@@ -1156,6 +1265,9 @@ async function onLoggedIn(username) {
   xp = prog.xp; level = prog.level;
   xpCapValue = prog.xp_cap || computeXpCap(level);
   streakCount.textContent = prog.streak;
+  lessonTopics = prog.topics || [];
+  currentTopicIndex = prog.current_topic_index || 0;
+  currentTopicObj = prog.current_topic || null;
   updateXpUI();
 
   if (!prog.onboarding_complete) {
@@ -1192,10 +1304,12 @@ function updateLevelUI() {
 async function showMainApp() {
   updateLevelUI();
   renderFlowchart();
+  renderLessonMap();
   await Promise.all([loadHistory(), loadWishlist()]);
   navigateTo('quest');
   mainApp.style.display = '';
   input.focus();
+  resetIdleTimer();
 }
 
 // ── Flowchart renderer ─────────────────────────────────────────────
@@ -1238,6 +1352,62 @@ function renderFlowchart() {
     }
     questPath.appendChild(node);
   });
+}
+
+// ── Lesson map renderer (topics within the current subject level) ──
+function renderLessonMap() {
+  const list = document.getElementById('lessonMapList');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (!lessonTopics.length) {
+    list.innerHTML = '<p class="lesson-map-empty">No lesson map yet for this level.</p>';
+    return;
+  }
+
+  lessonTopics.forEach((topic, i) => {
+    const row = document.createElement('div');
+    row.className = 'lesson-node';
+    let badge = '';
+    if (i < currentTopicIndex) {
+      row.classList.add('completed');
+      badge = '<span class="done-tag">✓</span>';
+    } else if (i === currentTopicIndex) {
+      row.classList.add('active');
+    } else {
+      row.classList.add('upcoming');
+    }
+    row.innerHTML = `<span class="lesson-node-label">${escapeHtml(topic.title)}</span>${badge}`;
+    list.appendChild(row);
+  });
+}
+
+// Refetches topics + current_topic_index after something server-side moved
+// the student to a different subject level (e.g. the "next level please"
+// dev bypass), since the lesson map otherwise stays stale.
+async function refreshLessonMapData() {
+  try {
+    const res = await fetch('/api/progress');
+    if (!res.ok) return;
+    const prog = await res.json();
+    lessonTopics = prog.topics || [];
+    currentTopicIndex = prog.current_topic_index || 0;
+    currentTopicObj = prog.current_topic || null;
+    renderLessonMap();
+  } catch (e) { /* non-critical */ }
+}
+
+// Applies a topic_adjustment object returned by /api/tutor (from Nova
+// calling adjust_lesson_progress) — updates the lesson map and, on a real
+// advance, shows a completion toast.
+function applyTopicAdjustment(adj) {
+  if (!adj || !adj.applied) return;
+  currentTopicIndex = adj.current_topic_index;
+  currentTopicObj = adj.current_topic || currentTopicObj;
+  renderLessonMap();
+  if (adj.direction === 'advance' && adj.completed_topic) {
+    celebrateToast('Topic complete: ' + adj.completed_topic.title + ' ✓');
+  }
 }
 
 // ── Onboarding ─────────────────────────────────────────────────────
@@ -1506,7 +1676,15 @@ async function loadHistory() {
     );
     conversation = hist.messages.map(m => ({ role: m.role, content: m.content }));
   } else {
-    renderMessage('assistant', "Hey, I'm Nova — your " + (LEVEL_LABELS[currentSubjectLevel] || 'Math') + " guide! What would you like to work on today?");
+    const levelLabel = LEVEL_LABELS[currentSubjectLevel] || 'Math';
+    const welcome = currentTopicObj
+      ? "Hey, I'm Nova — your " + levelLabel + " guide! Let's dive into " + currentTopicObj.title + "."
+      : "Hey, I'm Nova — your " + levelLabel + " guide! What would you like to work on today?";
+    renderMessage('assistant', welcome);
+
+    // First-ever session: kick off a real lesson automatically, without
+    // waiting for the student to type first.
+    setTimeout(() => sendAutoTrigger('start_lesson'), 2500);
   }
 }
 
@@ -1582,6 +1760,48 @@ function toast(msg) {
   document.body.appendChild(t);
   requestAnimationFrame(() => t.classList.add('show'));
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2600);
+  return t;
+}
+
+// Same as toast(), plus the celebration jingle and a brief confetti burst —
+// used for level-up / topic-complete / subject-level-advance moments only.
+function celebrateToast(msg) {
+  const el = toast(msg);
+  playCelebrationJingle();
+  spawnConfetti(el);
+}
+
+// Small colored-square confetti burst anchored to `anchorEl`, matching the
+// app's red/black/cream palette. Fully self-cleaning: every piece lives in
+// one container removed by a single timeout, so nothing is left in the DOM
+// once the ~1.5s animation finishes.
+const CONFETTI_COLORS = ['#D8362A', '#1A1A1A', '#FAF6EF', '#EDE5D4'];
+function spawnConfetti(anchorEl) {
+  if (!anchorEl) return;
+  const rect = anchorEl.getBoundingClientRect();
+  const originX = rect.left + rect.width / 2;
+  const originY = rect.top;
+
+  const container = document.createElement('div');
+  container.className = 'confetti-burst';
+  document.body.appendChild(container);
+
+  const pieceCount = 18;
+  for (let i = 0; i < pieceCount; i++) {
+    const piece = document.createElement('span');
+    piece.className = 'confetti-piece';
+    piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    piece.style.left = originX + 'px';
+    piece.style.top = originY + 'px';
+    const dx = (Math.random() - 0.5) * 220;
+    const dy = -(Math.random() * 130 + 40);
+    piece.style.setProperty('--dx', dx + 'px');
+    piece.style.setProperty('--dy', dy + 'px');
+    piece.style.animationDelay = (Math.random() * 0.15) + 's';
+    container.appendChild(piece);
+  }
+
+  setTimeout(() => container.remove(), 1600);
 }
 
 // ── Badges ─────────────────────────────────────────────────────────
@@ -1641,8 +1861,70 @@ function updateXpUI() {
   }
 }
 
+// ── Idle-continue: nudge Nova to keep teaching after a quiet spell ─
+const IDLE_TIMEOUT_MS = 10000;
+
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  if (activeView !== 'quest' || awaitingReply || !conversation.length) return;
+  idleTimer = setTimeout(() => {
+    if (!awaitingReply) sendAutoTrigger('idle_continue');
+  }, IDLE_TIMEOUT_MS);
+}
+
+// Briefly flashes the tab title when Nova replies while the tab isn't
+// focused, reverting once the tab regains focus.
+function flashTabTitle() {
+  if (!document.hidden) return;
+  document.title = "Nova's Quest •";
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) document.title = ORIGINAL_TAB_TITLE;
+});
+
+// Auto-triggered tutor calls (start_lesson / idle_continue) — no new real
+// user text is sent or rendered, just the flag; failures are silent since
+// there's nothing the student actively asked for.
+async function sendAutoTrigger(trigger) {
+  if (awaitingReply) return;
+  awaitingReply = true;
+  showTyping();
+
+  try {
+    const res = await fetch('/api/tutor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: 'math', messages: conversation, trigger })
+    });
+    const data = await res.json();
+    hideTyping();
+    if (!res.ok || data.error) return;
+
+    const finalText = (data.reply || '').trim();
+    if (finalText) {
+      conversation.push({ role: 'assistant', content: finalText });
+      renderMessage('assistant', finalText);
+      renderVideoCard(data.resource);
+      playReplyTone();
+      flashTabTitle();
+    }
+    applyTopicAdjustment(data.topic_adjustment);
+  } catch (err) {
+    hideTyping();
+    console.error('Nova auto-trigger error:', err);
+  } finally {
+    awaitingReply = false;
+    resetIdleTimer();
+  }
+}
+
 // ── Send message ───────────────────────────────────────────────────
 async function sendMessage(text) {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  awaitingReply = true;
+
   conversation.push({ role: 'user', content: text });
   renderMessage('user', text);
   input.value = '';
@@ -1671,6 +1953,8 @@ async function sendMessage(text) {
     conversation.push({ role: 'assistant', content: finalText });
     renderMessage('assistant', finalText);
     renderVideoCard(data.resource);
+    playReplyTone();
+    flashTabTitle();
 
     // Update XP from server response
     if (data.progress) {
@@ -1678,15 +1962,20 @@ async function sendMessage(text) {
       level = data.progress.level;
       xpCapValue = data.progress.xp_cap || computeXpCap(level);
       updateXpUI();
-      if (data.progress.leveled_up) toast('Level up! Math is now Level ' + level + ' ⭐');
+      if (data.progress.leveled_up) celebrateToast('Level up! Math is now Level ' + level + ' ⭐');
     }
 
-    // Update flowchart and level label if subject level changed (dev bypass or future logic)
+    applyTopicAdjustment(data.topic_adjustment);
+
+    // Update flowchart, level label, and lesson map if subject level changed (dev bypass or future logic)
     const newSubjectLevel = (data.progress && data.progress.subject_level) || data.subject_level;
     if (newSubjectLevel && newSubjectLevel !== currentSubjectLevel) {
+      const advanced = LEVEL_ORDER.indexOf(newSubjectLevel) > LEVEL_ORDER.indexOf(currentSubjectLevel);
       currentSubjectLevel = newSubjectLevel;
       updateLevelUI();
       renderFlowchart();
+      await refreshLessonMapData();
+      if (advanced) celebrateToast('Level up! Now exploring ' + LEVEL_LABELS[newSubjectLevel] + ' ⭐');
     }
   } catch (err) {
     console.error('Nova tutor error:', err);
@@ -1696,6 +1985,8 @@ async function sendMessage(text) {
       { error: true });
   } finally {
     input.disabled = false; sendBtn.disabled = false; input.focus();
+    awaitingReply = false;
+    resetIdleTimer();
   }
 }
 
@@ -1706,6 +1997,7 @@ function autoResizeInput() {
   input.style.height = Math.min(input.scrollHeight, INPUT_MAX_HEIGHT) + 'px';
 }
 input.addEventListener('input', autoResizeInput);
+input.addEventListener('input', resetIdleTimer);
 
 // Enter sends; Shift+Enter inserts a newline.
 input.addEventListener('keydown', function(e) {
@@ -1726,6 +2018,7 @@ resetBtn.addEventListener('click', function() {
   conversation = [];
   messagesEl.innerHTML = '';
   renderMessage('assistant', "New topic — ready when you are. What part of " + (LEVEL_LABELS[currentSubjectLevel] || 'Math') + " do you want to explore?");
+  resetIdleTimer();
 });
 
 memoryBtn.addEventListener('click', function() {

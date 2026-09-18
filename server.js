@@ -122,6 +122,7 @@ async function initDb() {
       updated_at TIMESTAMP DEFAULT NOW()
     );
     ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS current_topic_index INTEGER DEFAULT 0;
+    ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS last_active_date DATE;
     CREATE TABLE IF NOT EXISTS messages (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -370,6 +371,14 @@ Do not use markdown formatting (no asterisks, no headers, no bullet
 lists unless asked) or LaTeX/dollar-sign math notation — write math in
 plain text (^ for exponents, / for fractions). If you're not sure about
 something, say so plainly instead of guessing.
+
+When you've actually taught the student's current topic and checked
+whether they're following it (e.g. asked a quick question or had them
+try one themselves), call the adjust_lesson_progress function: "advance"
+once they've got it, "repeat" if you should go over it again a different
+way, or "back" if they seem confused enough that revisiting the previous
+topic first would help. Don't call it on every message — only once
+you've taught something and gotten a real signal of whether it landed.
 `;
 
 const SYSTEM_PROMPTS = {
@@ -528,6 +537,92 @@ const YOUTUBE_SEARCH_TOOL = {
   }]
 };
 
+// Gemini tool declaration — Nova calls this once she's taught the current
+// topic and checked whether the student is following, so the app can move
+// current_topic_index the same way the "next level please" bypass moves
+// subject_level. Reuses the same function-calling pattern as the YouTube
+// search tool above.
+const ADJUST_LESSON_PROGRESS_TOOL = {
+  functionDeclarations: [{
+    name: 'adjust_lesson_progress',
+    description: 'Move the student\'s lesson progress after teaching the current topic and checking their understanding.',
+    parameters: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['advance', 'repeat', 'back'],
+          description: '"advance" if the student has got the current topic and is ready for the next one, "repeat" if the current topic should be re-taught a different way, or "back" if they need the previous topic revisited first.'
+        }
+      },
+      required: ['direction']
+    }
+  }]
+};
+
+// Combined tool list for /api/tutor — Nova can call either function in the
+// same turn.
+const TUTOR_TOOLS = [{
+  functionDeclarations: [
+    ...YOUTUBE_SEARCH_TOOL.functionDeclarations,
+    ...ADJUST_LESSON_PROGRESS_TOOL.functionDeclarations
+  ]
+}];
+
+// A few different natural ways for Nova to nudge a student who's gone quiet
+// mid-lesson — picked at random per idle_continue call so it's not always
+// the same line.
+const IDLE_CONTINUE_PROMPTS = [
+  "The student has gone quiet for a bit. Naturally pick back up teaching the current topic where you left off — no need to call attention to the pause.",
+  "The student hasn't responded in a while. Casually check in — something like asking if they're still there or want to keep going — then continue.",
+  "It's been quiet for a bit. Continue explaining the current topic naturally, as if just picking the thread back up.",
+  "The student has been idle for a moment. Give a brief, casual nudge to see if they're still around, then keep teaching."
+];
+
+// Used once, right after the canned welcome message, to kick off a real
+// first lesson without the student having to type anything.
+const START_LESSON_INSTRUCTION =
+  "The student just arrived and has already been greeted by name in the chat — don't say hello or introduce yourself again. Jump straight into teaching their current topic now.";
+
+// Builds the per-request note telling Nova what the student's current
+// lesson topic actually is (current_topic_index in user_progress) — kept
+// out of SYSTEM_PROMPTS since it's dynamic per student, not per subject.
+function buildLessonFocusNote(currentTopic) {
+  if (!currentTopic) return '';
+  return `\n\nThe student's current lesson topic is "${currentTopic.title}": ${currentTopic.objective} Use this as the current teaching focus.`;
+}
+
+// Applies a lesson-progress move Nova requested via the adjust_lesson_progress
+// function call, clamped to valid topic indices, and persists it the same
+// way the "next level please" bypass persists subject_level changes.
+async function applyLessonProgressAdjustment(userId, subjectLevel, currentIndex, direction) {
+  const topics = CURRICULUM[subjectLevel] || [];
+  if (!topics.length || !['advance', 'repeat', 'back'].includes(direction)) return null;
+
+  let newIndex = currentIndex;
+  if (direction === 'advance') newIndex = Math.min(currentIndex + 1, topics.length - 1);
+  else if (direction === 'back') newIndex = Math.max(currentIndex - 1, 0);
+  // 'repeat' leaves newIndex unchanged.
+
+  const advanced = direction === 'advance' && newIndex !== currentIndex;
+
+  if (newIndex !== currentIndex) {
+    await pool.query(
+      'UPDATE user_progress SET current_topic_index = $1, updated_at = NOW() WHERE user_id = $2',
+      [newIndex, userId]
+    );
+  }
+
+  return {
+    direction,
+    applied: newIndex !== currentIndex,
+    previous_topic_index: currentIndex,
+    current_topic_index: newIndex,
+    completed_topic: advanced ? { id: topics[currentIndex].id, title: topics[currentIndex].title } : null,
+    current_topic: topics[newIndex] ? { id: topics[newIndex].id, title: topics[newIndex].title } : null
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Auth routes
 // ---------------------------------------------------------------------------
@@ -633,8 +728,22 @@ app.get('/api/me', (req, res) => {
 
 app.get('/api/progress', requireAuth, async (req, res) => {
   try {
+    // This doubles as the "session check" that updates the day streak:
+    // same day as last_active_date -> unchanged, exactly yesterday -> +1,
+    // anything else (a gap, or first-ever login where last_active_date is
+    // still NULL) -> reset to 1. Done as a single UPDATE...RETURNING so
+    // this stays one round trip instead of a separate read then write.
     const { rows } = await pool.query(
-      'SELECT xp, level, streak, subject_level, onboarding_complete, current_topic_index FROM user_progress WHERE user_id = $1',
+      `UPDATE user_progress
+          SET streak = CASE
+                WHEN last_active_date = CURRENT_DATE THEN streak
+                WHEN last_active_date = CURRENT_DATE - 1 THEN streak + 1
+                ELSE 1
+              END,
+              last_active_date = CURRENT_DATE,
+              updated_at = NOW()
+        WHERE user_id = $1
+        RETURNING xp, level, streak, subject_level, onboarding_complete, current_topic_index`,
       [req.session.userId]
     );
     const prog = rows[0] || {
@@ -642,7 +751,12 @@ app.get('/api/progress', requireAuth, async (req, res) => {
     };
     const topics = CURRICULUM[prog.subject_level] || [];
     const currentTopic = topics[prog.current_topic_index] || null;
-    res.json({ ...prog, xp_cap: xpCap(prog.level), current_topic: currentTopic });
+    res.json({
+      ...prog,
+      xp_cap: xpCap(prog.level),
+      current_topic: currentTopic,
+      topics: topics.map(t => ({ id: t.id, title: t.title }))
+    });
   } catch (err) {
     console.error('Progress error:', err);
     res.status(500).json({ error: 'Could not load progress.' });
@@ -975,17 +1089,23 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     });
   }
 
-  const { messages, subject } = req.body || {};
+  const { messages, subject, trigger } = req.body || {};
 
-  if (!Array.isArray(messages) || messages.length === 0) {
+  // Auto-triggers ('start_lesson' right after the welcome message,
+  // 'idle_continue' after a quiet spell) carry no new real user text — the
+  // client sends its existing conversation as context and this flag instead.
+  const AUTO_TRIGGERS = new Set(['start_lesson', 'idle_continue']);
+  const isAutoTrigger = AUTO_TRIGGERS.has(trigger);
+
+  if (!Array.isArray(messages) || (!isAutoTrigger && messages.length === 0)) {
     return res.status(400).json({ error: 'Request must include a non-empty "messages" array.' });
   }
 
   const userId = req.session.userId;
-  const userMsg = messages[messages.length - 1];
+  const userMsg = isAutoTrigger ? null : messages[messages.length - 1];
 
   // ── Developer bypass — "next level please" ─────────────────────────
-  if (userMsg.content.trim().toLowerCase() === 'next level please') {
+  if (!isAutoTrigger && userMsg.content.trim().toLowerCase() === 'next level please') {
     const { rows: progRows } = await pool.query(
       'SELECT subject_level FROM user_progress WHERE user_id = $1',
       [userId]
@@ -1027,32 +1147,49 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
 
   // ── Normal path ────────────────────────────────────────────────────
   // Ignore the "subject" field from the frontend — read the real placement from DB.
-  // Fetched once here (xp/level included) so addXp() below doesn't have to
-  // re-query the same row again later in the same request.
+  // Fetched once here (xp/level/current_topic_index included) so addXp()
+  // below doesn't have to re-query the same row again later in the request.
   const { rows: progressRows } = await pool.query(
-    'SELECT xp, level, subject_level FROM user_progress WHERE user_id = $1',
+    'SELECT xp, level, subject_level, current_topic_index FROM user_progress WHERE user_id = $1',
     [userId]
   );
   const progressRow = progressRows[0] || null;
   const subjectLevel = progressRow?.subject_level || null;
+  const currentTopicIndex = progressRow?.current_topic_index || 0;
   if (!subjectLevel) {
     console.warn(`User ${userId} reached /api/tutor with null subject_level — defaulting to algebra1.`);
   }
-  const systemPrompt = SYSTEM_PROMPTS[subjectLevel] || SYSTEM_PROMPTS.algebra1;
+  const topics = CURRICULUM[subjectLevel] || [];
+  const currentTopic = topics[currentTopicIndex] || null;
 
-  try {
-    await pool.query(
-      'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
-      [userId, 'user', userMsg.content]
-    );
-  } catch (err) {
-    console.error('Failed to save user message:', err);
+  let systemPrompt = (SYSTEM_PROMPTS[subjectLevel] || SYSTEM_PROMPTS.algebra1) + buildLessonFocusNote(currentTopic);
+  if (trigger === 'start_lesson') {
+    systemPrompt += `\n\n${START_LESSON_INSTRUCTION}`;
+  } else if (trigger === 'idle_continue') {
+    systemPrompt += `\n\n${IDLE_CONTINUE_PROMPTS[Math.floor(Math.random() * IDLE_CONTINUE_PROMPTS.length)]}`;
+  }
+
+  if (!isAutoTrigger) {
+    try {
+      await pool.query(
+        'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
+        [userId, 'user', userMsg.content]
+      );
+    } catch (err) {
+      console.error('Failed to save user message:', err);
+    }
   }
 
   // Only the most recent turns go to Gemini — full history is still persisted
   // above and still returned in full (up to HISTORY_DISPLAY_LIMIT) by
   // /api/history, this just keeps per-message context/cost/latency bounded.
-  const contextMessages = messages.slice(-GEMINI_CONTEXT_MESSAGES);
+  let contextMessages = messages.slice(-GEMINI_CONTEXT_MESSAGES);
+  if (isAutoTrigger && contextMessages.length === 0) {
+    // Gemini needs at least one contents turn. This placeholder is never
+    // persisted to the messages table or shown to the student — the real
+    // instruction for what to actually say lives in systemPrompt above.
+    contextMessages = [{ role: 'user', content: '(internal trigger — no visible student message)' }];
+  }
 
   try {
     const onFallbackWarn = (primaryData) => {
@@ -1063,7 +1200,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     };
 
     let { response, data } = await callGeminiWithFallback(
-      systemPrompt, contextMessages, onFallbackWarn, [YOUTUBE_SEARCH_TOOL]
+      systemPrompt, contextMessages, onFallbackWarn, TUTOR_TOOLS
     );
 
     if (!response.ok && isModelUnavailableError(data)) {
@@ -1090,44 +1227,23 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     }
 
     // ── Function calling: Nova can ask for a real video instead of writing
-    // a link itself. If she does, run the search, hand the real result back
-    // to Gemini, and use its follow-up reply as the actual response.
+    // a link itself, and/or move the lesson forward/back once she's taught
+    // and checked understanding. If she does either, run them, hand the real
+    // results back to Gemini, and use its follow-up reply as the response.
     let resource = null;
-    const functionCallPart = (candidate.content && candidate.content.parts || [])
-      .find(part => part.functionCall);
+    let topicAdjustment = null;
+    const functionCallParts = (candidate.content && candidate.content.parts || [])
+      .filter(part => part.functionCall);
 
-    if (functionCallPart) {
-      const fc = functionCallPart.functionCall;
-      let video = null;
+    if (functionCallParts.length) {
+      const functionResponseParts = [];
 
-      if (fc.name === 'search_youtube_video') {
-        video = await searchReputableYoutubeVideo((fc.args && fc.args.query) || '');
-      }
+      for (const part of functionCallParts) {
+        const fc = part.functionCall;
+        let result;
 
-      const functionResponsePart = {
-        functionResponse: {
-          name: fc.name,
-          ...(fc.id ? { id: fc.id } : {}),
-          response: { result: video || { found: false } }
-        }
-      };
-
-      const followUpContents = [
-        ...toGeminiContents(contextMessages),
-        candidate.content,
-        { role: 'user', parts: [functionResponsePart] }
-      ];
-
-      let followUp = await callGeminiRaw(PRIMARY_MODEL, systemPrompt, followUpContents, [YOUTUBE_SEARCH_TOOL]);
-      if (!followUp.response.ok && isModelUnavailableError(followUp.data)) {
-        onFallbackWarn(followUp.data);
-        followUp = await callGeminiRaw(FALLBACK_MODEL, systemPrompt, followUpContents, [YOUTUBE_SEARCH_TOOL]);
-      }
-
-      if (followUp.response.ok) {
-        const followCandidate = (followUp.data.candidates || [])[0];
-        if (followCandidate) {
-          candidate = followCandidate;
+        if (fc.name === 'search_youtube_video') {
+          const video = await searchReputableYoutubeVideo((fc.args && fc.args.query) || '');
           if (video) {
             resource = {
               videoId: video.videoId,
@@ -1136,6 +1252,41 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
               thumbnail: video.thumbnail
             };
           }
+          result = video || { found: false };
+        } else if (fc.name === 'adjust_lesson_progress') {
+          topicAdjustment = await applyLessonProgressAdjustment(
+            userId, subjectLevel, currentTopicIndex, fc.args && fc.args.direction
+          );
+          result = topicAdjustment || { applied: false };
+        } else {
+          result = { found: false };
+        }
+
+        functionResponseParts.push({
+          functionResponse: {
+            name: fc.name,
+            ...(fc.id ? { id: fc.id } : {}),
+            response: { result }
+          }
+        });
+      }
+
+      const followUpContents = [
+        ...toGeminiContents(contextMessages),
+        candidate.content,
+        { role: 'user', parts: functionResponseParts }
+      ];
+
+      let followUp = await callGeminiRaw(PRIMARY_MODEL, systemPrompt, followUpContents, TUTOR_TOOLS);
+      if (!followUp.response.ok && isModelUnavailableError(followUp.data)) {
+        onFallbackWarn(followUp.data);
+        followUp = await callGeminiRaw(FALLBACK_MODEL, systemPrompt, followUpContents, TUTOR_TOOLS);
+      }
+
+      if (followUp.response.ok) {
+        const followCandidate = (followUp.data.candidates || [])[0];
+        if (followCandidate) {
+          candidate = followCandidate;
         }
       } else {
         console.error('Gemini follow-up (post function call) error:', followUp.data);
@@ -1155,14 +1306,16 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
         'INSERT INTO messages (user_id, role, content) VALUES ($1, $2, $3)',
         [userId, 'assistant', text]
       );
-      if (progressRow) {
+      // Auto-triggers aren't a real student message, so they don't earn XP —
+      // same no-XP treatment as the "next level please" dev bypass.
+      if (progressRow && !isAutoTrigger) {
         progress = await addXp(userId, XP_PER_MESSAGE, progressRow);
       }
     } catch (err) {
       console.error('Failed to save assistant message or update XP:', err);
     }
 
-    res.json({ reply: text, progress, resource });
+    res.json({ reply: text, progress, resource, topic_adjustment: topicAdjustment });
   } catch (err) {
     console.error('Tutor request failed:', err);
     res.status(502).json({ error: 'Could not reach the tutor service. Please try again.' });
