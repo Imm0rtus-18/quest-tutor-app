@@ -893,11 +893,91 @@ app.get('/api/progress', requireAuth, async (req, res) => {
   }
 });
 
+// A small topic-relevant symbol per chapter, keyed by id, for the
+// force-directed Knowledge Map graph — picked for genuine relevance to
+// each topic's actual content, not arbitrary.
+const NODE_SYMBOLS = {
+  // Algebra 1
+  'algebra1-01': 'x', 'algebra1-02': '±', 'algebra1-03': '⚖', 'algebra1-04': '📈',
+  'algebra1-05': '╱', 'algebra1-06': '≤', 'algebra1-07': '⋂', 'algebra1-08': 'xⁿ',
+  'algebra1-09': '∪', 'algebra1-10': '🧩', 'algebra1-11': '½', 'algebra1-12': '√',
+  // Geometry
+  'geometry-01': '📐', 'geometry-02': '∴', 'geometry-03': '∥', 'geometry-04': '≅',
+  'geometry-05': '△', 'geometry-06': '⬠', 'geometry-07': '∼', 'geometry-08': '◺',
+  'geometry-09': '🔄', 'geometry-10': '◯', 'geometry-11': '▦', 'geometry-12': '📦',
+  // Algebra 2
+  'algebra2-01': '⚖', 'algebra2-02': '📈', 'algebra2-03': '⊞', 'algebra2-04': '∪',
+  'algebra2-05': '🧩', 'algebra2-06': '√', 'algebra2-07': '📶', 'algebra2-08': '½',
+  'algebra2-09': 'Σ', 'algebra2-10': '∠', 'algebra2-11': '∿', 'algebra2-12': '%',
+  // Pre-Calculus
+  'precalc-01': 'ƒ', 'precalc-02': '½', 'precalc-03': '📶', 'precalc-04': '∠',
+  'precalc-05': '∿', 'precalc-06': '→', 'precalc-07': '⋂', 'precalc-08': '⊞',
+  'precalc-09': 'Σ', 'precalc-10': '⬭', 'precalc-11': '∫', 'precalc-12': 'i'
+};
+
+// Cross-subject "related topic" edges layered on top of each subject's own
+// sequential chain — genuine curriculum relationships, not manufactured
+// for density. Resolved by subject+title (not hardcoded ids) so a title
+// change elsewhere can't silently point an edge at the wrong node. The
+// 'convergence' kind marks the three edges that all feed into "Conic
+// Sections and Analytic Geometry" from three different subjects.
+const CROSS_SUBJECT_EDGE_DEFS = [
+  ['algebra1', 'Solving Linear Equations', 'algebra2', 'Equations and Inequalities'],
+  ['algebra1', 'Graphing Linear Equations and Functions', 'algebra2', 'Linear Functions and Systems'],
+  ['algebra1', 'Systems of Linear Equations and Inequalities', 'algebra2', 'Linear Functions and Systems'],
+  ['algebra1', 'Systems of Linear Equations and Inequalities', 'algebra2', 'Matrices'],
+  ['algebra1', 'Exponents and Exponential Functions', 'algebra2', 'Rational Exponents and Radical Functions'],
+  ['algebra1', 'Exponents and Exponential Functions', 'algebra2', 'Exponential and Logarithmic Functions'],
+  ['algebra1', 'Quadratic Equations and Functions', 'algebra2', 'Quadratic Functions and Factoring'],
+  ['algebra1', 'Polynomials and Factoring', 'algebra2', 'Polynomials and Polynomial Functions'],
+  ['algebra1', 'Rational Expressions and Equations', 'algebra2', 'Rational Functions'],
+  ['algebra1', 'Radicals and More Connections to Geometry', 'algebra2', 'Rational Exponents and Radical Functions'],
+  ['algebra1', 'Radicals and More Connections to Geometry', 'geometry', 'Foundations of Geometry'],
+
+  ['geometry', 'Right Triangles and Trigonometry', 'precalc', 'Trigonometric Functions'],
+  ['geometry', 'Transformations', 'precalc', 'Trigonometric Functions'],
+  ['geometry', 'Circles', 'precalc', 'Conic Sections and Analytic Geometry', 'convergence'],
+  ['geometry', 'Foundations of Geometry', 'precalc', 'Conic Sections and Analytic Geometry', 'convergence'],
+
+  ['algebra2', 'Exponential and Logarithmic Functions', 'precalc', 'Exponential and Logarithmic Functions'],
+  ['algebra2', 'Trigonometric Ratios and Functions', 'precalc', 'Trigonometric Functions'],
+  ['algebra2', 'Trigonometric Graphs and Identities', 'precalc', 'Analytic Trigonometry'],
+  ['algebra2', 'Rational Functions', 'precalc', 'Polynomial and Rational Functions'],
+  ['algebra2', 'Sequences and Series', 'precalc', 'Sequences Series and Probability'],
+  ['algebra2', 'Probability and Statistics', 'precalc', 'Sequences Series and Probability'],
+  ['algebra2', 'Matrices', 'precalc', 'Matrices and Determinants'],
+  ['algebra2', 'Equations and Inequalities', 'precalc', 'Systems of Equations and Inequalities'],
+  ['algebra2', 'Quadratic Functions and Factoring', 'precalc', 'Conic Sections and Analytic Geometry', 'convergence']
+];
+
+function findTopicIdByTitle(subjectId, title) {
+  const topics = subjectId === 'algebra1' ? CURRICULUM.algebra1 : PLACEHOLDER_TOPICS[subjectId];
+  const match = (topics || []).find(t => t.title === title);
+  return match ? match.id : null;
+}
+
+// Resolved once at startup (pure in-memory data, no request needed) —
+// any def that fails to resolve is logged and skipped rather than
+// breaking the whole map.
+const CROSS_SUBJECT_EDGES = CROSS_SUBJECT_EDGE_DEFS.map(([fromSubject, fromTitle, toSubject, toTitle, kind]) => {
+  const source = findTopicIdByTitle(fromSubject, fromTitle);
+  const target = findTopicIdByTitle(toSubject, toTitle);
+  if (!source || !target) {
+    console.warn(`Knowledge map: could not resolve cross-subject edge ${fromSubject}/"${fromTitle}" -> ${toSubject}/"${toTitle}"`);
+    return null;
+  }
+  return { source, target, kind: kind || 'related' };
+}).filter(Boolean);
+
 // All 4 subject tracks (Algebra 1 -> Geometry -> Algebra 2 -> Pre-Calculus)
 // for the full-screen Knowledge Map — real chapter data for Algebra 1,
-// title-only placeholders for the other three, plus the student's real
+// title + real one-sentence objective for the other three (no lesson
+// content yet, but real enough for hover text), plus the student's real
 // subject_level/current_topic_index so the frontend can shade real
 // progress (Algebra 1 only, since that's the only subject with any yet).
+// Edges are returned as a flat list — the sequential in-chapter-order
+// chain for each subject, plus the curated cross-subject links above —
+// and rendered client-side as a d3-force graph, not a fixed layout.
 app.get('/api/knowledge-map', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -906,18 +986,27 @@ app.get('/api/knowledge-map', requireAuth, async (req, res) => {
     );
     const prog = rows[0] || { subject_level: null, current_topic_index: 0 };
 
+    const sequentialEdges = [];
     const subjects = LEVEL_ORDER.map(levelId => {
       const hasContent = levelId === 'algebra1';
-      const topics = hasContent
-        ? (CURRICULUM[levelId] || []).map(t => ({ id: t.id, title: t.title, objective: t.objective }))
-        : (PLACEHOLDER_TOPICS[levelId] || []).map(t => ({ id: t.id, title: t.title }));
+      const rawTopics = hasContent ? (CURRICULUM[levelId] || []) : (PLACEHOLDER_TOPICS[levelId] || []);
+      const topics = rawTopics.map(t => ({
+        id: t.id,
+        title: t.title,
+        objective: t.objective,
+        symbol: NODE_SYMBOLS[t.id] || '•'
+      }));
+      for (let i = 0; i < topics.length - 1; i++) {
+        sequentialEdges.push({ source: topics[i].id, target: topics[i + 1].id, kind: 'sequential' });
+      }
       return { id: levelId, label: LEVEL_LABELS[levelId], has_content: hasContent, topics };
     });
 
     res.json({
       subject_level: prog.subject_level,
       current_topic_index: prog.current_topic_index || 0,
-      subjects
+      subjects,
+      edges: [...sequentialEdges, ...CROSS_SUBJECT_EDGES]
     });
   } catch (err) {
     console.error('Knowledge map error:', err);

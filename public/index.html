@@ -6,6 +6,7 @@
 <title>Nova's Quest — Algebra II Prototype</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <style>
   :root{
     --bg:#F2ECE0;
@@ -498,12 +499,12 @@
     margin:12px 0 0;text-align:right;
   }
 
-  /* Full-screen Knowledge Map (4 connected subject tracks) */
+  /* Full-screen Knowledge Map — force-directed graph (d3-force + SVG) */
   .km-full-card{
     background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
-    padding:24px;width:100%;max-width:1100px;max-height:88vh;overflow-y:auto;
+    padding:24px;width:100%;max-width:1300px;max-height:92vh;overflow-y:auto;
   }
-  .km-full-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .km-full-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
   .km-full-title{font-family:var(--font-display);font-weight:400;font-size:14px;margin:0;}
   .km-full-close{
     background:var(--bg-panel-alt);color:var(--text);border:2px solid var(--border);
@@ -512,35 +513,30 @@
   .km-full-close:hover{background:var(--accent-soft);}
   .km-full-loading{font-family:var(--font-body);font-size:14px;color:var(--text-muted);}
 
-  .km-full-body{display:flex;flex-direction:column;}
-  .km-full-lane{display:flex;flex-direction:column;gap:8px;}
-  .km-full-lane-label{
-    font-family:var(--font-display);font-size:10px;color:var(--text-muted);
-    text-transform:uppercase;letter-spacing:1px;margin:0;
-  }
-  .km-full-row{display:flex;align-items:center;justify-content:space-between;}
-  .km-full-row.reverse{flex-direction:row-reverse;}
-  .km-full-node{
-    width:32px;height:32px;flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;
-    border:2px solid var(--border);background:var(--bg-panel-alt);
-    font-family:var(--font-display);font-size:10px;color:var(--text-muted);
-    box-shadow:var(--shadow-xs);
-  }
-  .km-full-node.completed{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
-  .km-full-node.active{background:var(--accent);border-color:var(--border);color:var(--accent-ink);box-shadow:var(--shadow-accent-xs);}
-  .km-full-node.locked{opacity:0.4;}
-  .km-full-tick{
-    flex:1 1 auto;height:2px;min-width:6px;margin:0 2px;
-    background:repeating-linear-gradient(90deg,var(--border) 0 3px,transparent 3px 6px);
-  }
-  .km-full-connector-wrap{display:flex;padding:2px 15px;}
-  .km-full-connector-wrap.right{justify-content:flex-end;}
-  .km-full-connector-wrap.left{justify-content:flex-start;}
-  .km-full-connector{
-    width:2px;height:14px;
-    background:repeating-linear-gradient(var(--border) 0 3px, transparent 3px 6px);
-  }
+  .km-full-body{width:100%;}
+  .km-graph-svg{width:100%;height:640px;display:block;background:var(--bg-panel-alt);border:2px solid var(--border);}
+  .km-graph-node{cursor:default;}
+  .km-graph-rect{stroke:var(--border);stroke-width:2;fill:var(--bg-panel-alt);}
+  .km-node-completed .km-graph-rect{fill:var(--accent-soft);stroke:var(--accent);}
+  .km-node-active .km-graph-rect{fill:var(--accent);stroke:var(--border);}
+  .km-node-locked .km-graph-rect{opacity:0.55;}
+  .km-graph-symbol{font-family:var(--font-body);font-size:14px;fill:var(--text);pointer-events:none;}
+  .km-node-active .km-graph-symbol{fill:var(--accent-ink);}
+  .km-node-completed .km-graph-symbol{fill:var(--accent);}
+  .km-node-locked .km-graph-symbol{opacity:0.75;}
+  .km-link-sequential{stroke:var(--border);stroke-width:2.5;}
+  .km-link-related{stroke:var(--text-muted);stroke-width:1;stroke-dasharray:4 3;opacity:0.6;}
+  .km-link-convergence{stroke:var(--accent);stroke-width:2;stroke-dasharray:5 3;opacity:0.9;}
+
+  .km-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-family:var(--font-body);font-size:12px;color:var(--text-muted);}
+  .km-legend-item{display:flex;align-items:center;gap:6px;}
+  .km-legend-swatch{width:14px;height:14px;border:2px solid var(--border);flex-shrink:0;}
+  .km-legend-swatch.completed{background:var(--accent-soft);border-color:var(--accent);}
+  .km-legend-swatch.active{background:var(--accent);}
+  .km-legend-swatch.locked{background:var(--bg-panel-alt);opacity:0.55;}
+  .km-legend-line{width:22px;height:0;border-top:3px solid var(--border);}
+  .km-legend-line.related{border-top:2px dashed var(--text-muted);}
+  .km-legend-line.convergence{border-top:2px dashed var(--accent);}
 
   /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
      squeezed the Math node until overflow-wrap broke subject names
@@ -2359,9 +2355,11 @@ memoryBtn.addEventListener('click', function() {
 });
 
 // ── Full-screen Knowledge Map ────────────────────────────────────────
-// 4 subject tracks stacked as one continuous chain: alternating lanes
-// render right-to-left (CSS row-reverse) so each lane's end lines up
-// under the next lane's start, instead of 4 disconnected lists.
+// A real d3-force graph: all 4 subjects' chapters as nodes, laid out by
+// physics simulation (link/charge/center/collide forces) rather than a
+// fixed layout, so the 48 nodes settle organically into a web shaped by
+// their real connections — each subject's own sequential chain plus the
+// curated cross-subject edges from the backend.
 async function openKnowledgeMap() {
   knowledgeMapOverlay.classList.remove('hidden');
   knowledgeMapBody.innerHTML = '<p class="km-full-loading">Loading…</p>';
@@ -2377,51 +2375,96 @@ async function openKnowledgeMap() {
 
 function renderFullKnowledgeMap(data) {
   knowledgeMapBody.innerHTML = '';
-  const subjects = data.subjects || [];
 
-  subjects.forEach((subject, laneIdx) => {
-    const isReversed = laneIdx % 2 === 1;
+  const width = knowledgeMapBody.clientWidth || 1000;
+  const height = 640;
+  const NODE_SIZE = 30;
+
+  // Flatten all 4 subjects' topics into one node list, with the node's
+  // progress state derived the same way as before: only the student's
+  // actual current subject gets completed/active coloring, everything
+  // else (including all of Geometry/Algebra 2/Pre-Calc for now) is locked.
+  const nodes = [];
+  (data.subjects || []).forEach(subject => {
     const isCurrentSubject = subject.id === data.subject_level;
-
-    const lane = document.createElement('div');
-    lane.className = 'km-full-lane';
-
-    const label = document.createElement('p');
-    label.className = 'km-full-lane-label';
-    label.textContent = subject.label;
-    lane.appendChild(label);
-
-    const row = document.createElement('div');
-    row.className = 'km-full-row' + (isReversed ? ' reverse' : '');
-
     subject.topics.forEach((topic, i) => {
-      if (i > 0) {
-        const tick = document.createElement('div');
-        tick.className = 'km-full-tick';
-        row.appendChild(tick);
-      }
-      const node = document.createElement('div');
-      node.className = 'km-full-node';
-      if (isCurrentSubject && i < data.current_topic_index) node.classList.add('completed');
-      else if (isCurrentSubject && i === data.current_topic_index) node.classList.add('active');
-      else node.classList.add('locked');
-      node.textContent = String(i + 1);
-      node.title = topic.objective ? `${topic.title}: ${topic.objective}` : 'Coming soon';
-      row.appendChild(node);
+      let state = 'locked';
+      if (isCurrentSubject && i < data.current_topic_index) state = 'completed';
+      else if (isCurrentSubject && i === data.current_topic_index) state = 'active';
+      nodes.push({
+        id: topic.id,
+        subjectLabel: subject.label,
+        title: topic.title,
+        objective: topic.objective,
+        symbol: topic.symbol || '•',
+        state
+      });
     });
-
-    lane.appendChild(row);
-    knowledgeMapBody.appendChild(lane);
-
-    if (laneIdx < subjects.length - 1) {
-      const connectorWrap = document.createElement('div');
-      connectorWrap.className = 'km-full-connector-wrap ' + (isReversed ? 'left' : 'right');
-      const connector = document.createElement('div');
-      connector.className = 'km-full-connector';
-      connectorWrap.appendChild(connector);
-      knowledgeMapBody.appendChild(connectorWrap);
-    }
   });
+
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const links = (data.edges || [])
+    .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+    .map(e => ({ source: e.source, target: e.target, kind: e.kind || 'related' }));
+
+  const svg = d3.select(knowledgeMapBody).append('svg')
+    .attr('class', 'km-graph-svg')
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const linkSel = svg.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('class', d => 'km-link-' + d.kind);
+
+  const nodeSel = svg.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('class', d => 'km-graph-node km-node-' + d.state);
+
+  nodeSel.append('rect')
+    .attr('class', 'km-graph-rect')
+    .attr('width', NODE_SIZE)
+    .attr('height', NODE_SIZE)
+    .attr('x', -NODE_SIZE / 2)
+    .attr('y', -NODE_SIZE / 2);
+
+  nodeSel.append('text')
+    .attr('class', 'km-graph-symbol')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'central')
+    .text(d => d.symbol);
+
+  nodeSel.append('title')
+    .text(d => `${d.subjectLabel} — ${d.title}: ${d.objective}`);
+
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id)
+      .distance(l => l.kind === 'sequential' ? 50 : 110)
+      .strength(l => l.kind === 'sequential' ? 0.9 : 0.2))
+    .force('charge', d3.forceManyBody().strength(-110))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collide', d3.forceCollide(NODE_SIZE / 2 + 6));
+
+  simulation.on('tick', () => {
+    linkSel
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  const legend = document.createElement('div');
+  legend.className = 'km-legend';
+  legend.innerHTML = `
+    <span class="km-legend-item"><span class="km-legend-swatch completed"></span>Completed</span>
+    <span class="km-legend-item"><span class="km-legend-swatch active"></span>Current</span>
+    <span class="km-legend-item"><span class="km-legend-swatch locked"></span>Locked / no progress yet</span>
+    <span class="km-legend-item"><span class="km-legend-line"></span>Sequence within a subject</span>
+    <span class="km-legend-item"><span class="km-legend-line related"></span>Related topic, another subject</span>
+    <span class="km-legend-item"><span class="km-legend-line convergence"></span>Multiple subjects converge here</span>
+  `;
+  knowledgeMapBody.appendChild(legend);
 }
 
 function closeKnowledgeMap() {

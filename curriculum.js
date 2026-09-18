@@ -198,55 +198,60 @@ Using a^2 + b^2 = c^2: 6^2 + 8^2 = 36 + 64 = 100. So c = √100 = 10.`
   // geometry, algebra2, precalc: intentionally left out for now.
 };
 
-// Title-only chapter lists for subjects with no real content yet — used
-// only for the Knowledge Map visualization until each subject gets its
-// own curriculum pass (no objective/content fields, unlike CURRICULUM).
-function titleOnlyTopics(prefix, titles) {
-  return titles.map((title, i) => ({ id: `${prefix}-${String(i + 1).padStart(2, '0')}`, title }));
+// Chapter lists (with one-sentence objectives, for Knowledge Map hover
+// text) for subjects with no real lesson content yet — full content/
+// examples still pending each subject's own curriculum pass, unlike
+// CURRICULUM above.
+function placeholderTopics(prefix, entries) {
+  return entries.map(([title, objective], i) => ({
+    id: `${prefix}-${String(i + 1).padStart(2, '0')}`,
+    title,
+    objective
+  }));
 }
 
 const PLACEHOLDER_TOPICS = {
-  geometry: titleOnlyTopics('geometry', [
-    'Foundations of Geometry',
-    'Reasoning and Proof',
-    'Parallel and Perpendicular Lines',
-    'Congruent Triangles',
-    'Relationships Within Triangles',
-    'Quadrilaterals and Polygons',
-    'Similarity',
-    'Right Triangles and Trigonometry',
-    'Transformations',
-    'Circles',
-    'Area of Polygons and Circles',
-    'Surface Area and Volume'
+  geometry: placeholderTopics('geometry', [
+    ['Foundations of Geometry', 'Learn the basic building blocks of geometry — points, lines, planes — and how to measure segments and angles.'],
+    ['Reasoning and Proof', 'Build logical arguments and write geometric proofs using definitions, postulates, and theorems.'],
+    ['Parallel and Perpendicular Lines', 'Explore angle relationships formed by parallel lines and a transversal, and prove lines are parallel or perpendicular.'],
+    ['Congruent Triangles', 'Prove triangles congruent using SSS, SAS, ASA, and other congruence criteria.'],
+    ['Relationships Within Triangles', 'Study medians, altitudes, perpendicular bisectors, and triangle inequalities.'],
+    ['Quadrilaterals and Polygons', 'Classify and find properties of quadrilaterals and other polygons.'],
+    ['Similarity', 'Use ratios and proportions to identify and work with similar figures.'],
+    ['Right Triangles and Trigonometry', 'Apply the Pythagorean theorem and basic trigonometric ratios to right triangles.'],
+    ['Transformations', 'Translate, reflect, rotate, and dilate figures on the coordinate plane.'],
+    ['Circles', 'Study angles, arcs, chords, and tangent lines associated with circles.'],
+    ['Area of Polygons and Circles', 'Calculate the area of polygons, circles, and composite figures.'],
+    ['Surface Area and Volume', 'Find the surface area and volume of prisms, cylinders, pyramids, cones, and spheres.']
   ]),
-  algebra2: titleOnlyTopics('algebra2', [
-    'Equations and Inequalities',
-    'Linear Functions and Systems',
-    'Matrices',
-    'Quadratic Functions and Factoring',
-    'Polynomials and Polynomial Functions',
-    'Rational Exponents and Radical Functions',
-    'Exponential and Logarithmic Functions',
-    'Rational Functions',
-    'Sequences and Series',
-    'Trigonometric Ratios and Functions',
-    'Trigonometric Graphs and Identities',
-    'Probability and Statistics'
+  algebra2: placeholderTopics('algebra2', [
+    ['Equations and Inequalities', 'Solve and graph linear equations, inequalities, and absolute value equations.'],
+    ['Linear Functions and Systems', 'Graph linear functions and solve systems of linear equations and inequalities.'],
+    ['Matrices', 'Perform operations on matrices and use them to solve systems of equations.'],
+    ['Quadratic Functions and Factoring', 'Graph quadratic functions and factor quadratic expressions.'],
+    ['Polynomials and Polynomial Functions', 'Add, multiply, divide, and graph polynomial functions.'],
+    ['Rational Exponents and Radical Functions', 'Simplify expressions with rational exponents and work with radical functions.'],
+    ['Exponential and Logarithmic Functions', 'Graph and solve equations involving exponential growth/decay and logarithms.'],
+    ['Rational Functions', 'Simplify, graph, and solve equations involving rational functions.'],
+    ['Sequences and Series', 'Work with arithmetic and geometric sequences and series.'],
+    ['Trigonometric Ratios and Functions', 'Extend trigonometric ratios to the unit circle and general angles.'],
+    ['Trigonometric Graphs and Identities', 'Graph trigonometric functions and verify trigonometric identities.'],
+    ['Probability and Statistics', 'Calculate probabilities and analyze data using statistical measures.']
   ]),
-  precalc: titleOnlyTopics('precalc', [
-    'Functions and Their Graphs',
-    'Polynomial and Rational Functions',
-    'Exponential and Logarithmic Functions',
-    'Trigonometric Functions',
-    'Analytic Trigonometry',
-    'Additional Trigonometric Topics',
-    'Systems of Equations and Inequalities',
-    'Matrices and Determinants',
-    'Sequences Series and Probability',
-    'Conic Sections and Analytic Geometry',
-    'Limits and an Introduction to Calculus',
-    'Complex Numbers and Polar Coordinates'
+  precalc: placeholderTopics('precalc', [
+    ['Functions and Their Graphs', 'Analyze the domain, range, and behavior of various types of functions.'],
+    ['Polynomial and Rational Functions', 'Graph and analyze polynomial and rational functions, including their zeros and asymptotes.'],
+    ['Exponential and Logarithmic Functions', 'Model growth and decay using exponential and logarithmic functions.'],
+    ['Trigonometric Functions', 'Define trigonometric functions using the unit circle and graph their behavior.'],
+    ['Analytic Trigonometry', 'Prove trigonometric identities and solve trigonometric equations.'],
+    ['Additional Trigonometric Topics', 'Apply the Law of Sines and Law of Cosines, and work with vectors.'],
+    ['Systems of Equations and Inequalities', 'Solve systems of equations and inequalities, including nonlinear systems.'],
+    ['Matrices and Determinants', 'Use matrices and determinants to solve systems and represent transformations.'],
+    ['Sequences Series and Probability', 'Study sequences, series, combinatorics, and probability.'],
+    ['Conic Sections and Analytic Geometry', 'Study parabolas, circles, ellipses, and hyperbolas using coordinate geometry.'],
+    ['Limits and an Introduction to Calculus', 'Get a first look at limits and rates of change as a bridge into calculus.'],
+    ['Complex Numbers and Polar Coordinates', 'Work with complex numbers and represent points using polar coordinates.']
   ])
 };
 
