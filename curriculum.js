@@ -198,4 +198,56 @@ Using a^2 + b^2 = c^2: 6^2 + 8^2 = 36 + 64 = 100. So c = √100 = 10.`
   // geometry, algebra2, precalc: intentionally left out for now.
 };
 
-module.exports = { CURRICULUM };
+// Title-only chapter lists for subjects with no real content yet — used
+// only for the Knowledge Map visualization until each subject gets its
+// own curriculum pass (no objective/content fields, unlike CURRICULUM).
+function titleOnlyTopics(prefix, titles) {
+  return titles.map((title, i) => ({ id: `${prefix}-${String(i + 1).padStart(2, '0')}`, title }));
+}
+
+const PLACEHOLDER_TOPICS = {
+  geometry: titleOnlyTopics('geometry', [
+    'Foundations of Geometry',
+    'Reasoning and Proof',
+    'Parallel and Perpendicular Lines',
+    'Congruent Triangles',
+    'Relationships Within Triangles',
+    'Quadrilaterals and Polygons',
+    'Similarity',
+    'Right Triangles and Trigonometry',
+    'Transformations',
+    'Circles',
+    'Area of Polygons and Circles',
+    'Surface Area and Volume'
+  ]),
+  algebra2: titleOnlyTopics('algebra2', [
+    'Equations and Inequalities',
+    'Linear Functions and Systems',
+    'Matrices',
+    'Quadratic Functions and Factoring',
+    'Polynomials and Polynomial Functions',
+    'Rational Exponents and Radical Functions',
+    'Exponential and Logarithmic Functions',
+    'Rational Functions',
+    'Sequences and Series',
+    'Trigonometric Ratios and Functions',
+    'Trigonometric Graphs and Identities',
+    'Probability and Statistics'
+  ]),
+  precalc: titleOnlyTopics('precalc', [
+    'Functions and Their Graphs',
+    'Polynomial and Rational Functions',
+    'Exponential and Logarithmic Functions',
+    'Trigonometric Functions',
+    'Analytic Trigonometry',
+    'Additional Trigonometric Topics',
+    'Systems of Equations and Inequalities',
+    'Matrices and Determinants',
+    'Sequences Series and Probability',
+    'Conic Sections and Analytic Geometry',
+    'Limits and an Introduction to Calculus',
+    'Complex Numbers and Polar Coordinates'
+  ])
+};
+
+module.exports = { CURRICULUM, PLACEHOLDER_TOPICS };

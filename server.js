@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const { QUESTIONS, LEVEL_ORDER } = require('./questions');
-const { CURRICULUM } = require('./curriculum');
+const { CURRICULUM, PLACEHOLDER_TOPICS } = require('./curriculum');
 const { QUIZZES } = require('./quizzes');
 
 const app = express();
@@ -407,13 +407,16 @@ lists unless asked) or LaTeX/dollar-sign math notation — write math in
 plain text (^ for exponents, / for fractions). If you're not sure about
 something, say so plainly instead of guessing.
 
-When you've actually taught the student's current topic and checked
-whether they're following it (e.g. asked a quick question or had them
-try one themselves), call the adjust_lesson_progress function: "advance"
-once they've got it, "repeat" if you should go over it again a different
-way, or "back" if they seem confused enough that revisiting the previous
-topic first would help. Don't call it on every message — only once
-you've taught something and gotten a real signal of whether it landed.
+Only call adjust_lesson_progress once you've covered real ground on the
+student's current topic — its different sub-parts or several examples,
+not just one exchange — AND gotten a genuine demonstration of
+understanding, like the student correctly working through a problem
+themselves. A message or two of teaching, or the student just saying
+"ok" or "got it" without actually demonstrating the skill, is not
+enough — wait for real evidence either way. Once you have it, call
+adjust_lesson_progress: "advance" if they've clearly got it, "repeat" if
+you should go over it again a different way, or "back" if they seem
+confused enough that revisiting the previous topic first would help.
 `;
 
 const SYSTEM_PROMPTS = {
@@ -890,6 +893,38 @@ app.get('/api/progress', requireAuth, async (req, res) => {
   }
 });
 
+// All 4 subject tracks (Algebra 1 -> Geometry -> Algebra 2 -> Pre-Calculus)
+// for the full-screen Knowledge Map — real chapter data for Algebra 1,
+// title-only placeholders for the other three, plus the student's real
+// subject_level/current_topic_index so the frontend can shade real
+// progress (Algebra 1 only, since that's the only subject with any yet).
+app.get('/api/knowledge-map', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT subject_level, current_topic_index FROM user_progress WHERE user_id = $1',
+      [req.session.userId]
+    );
+    const prog = rows[0] || { subject_level: null, current_topic_index: 0 };
+
+    const subjects = LEVEL_ORDER.map(levelId => {
+      const hasContent = levelId === 'algebra1';
+      const topics = hasContent
+        ? (CURRICULUM[levelId] || []).map(t => ({ id: t.id, title: t.title, objective: t.objective }))
+        : (PLACEHOLDER_TOPICS[levelId] || []).map(t => ({ id: t.id, title: t.title }));
+      return { id: levelId, label: LEVEL_LABELS[levelId], has_content: hasContent, topics };
+    });
+
+    res.json({
+      subject_level: prog.subject_level,
+      current_topic_index: prog.current_topic_index || 0,
+      subjects
+    });
+  } catch (err) {
+    console.error('Knowledge map error:', err);
+    res.status(500).json({ error: 'Could not load the knowledge map.' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Rewards & wishlist
 // ---------------------------------------------------------------------------
@@ -1328,6 +1363,50 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     }
 
     return res.json({ reply, subject_level: newLevel });
+  }
+
+  // ── Developer bypass — "quiz me now" ────────────────────────────────
+  // Skips waiting for Nova to decide readiness — immediately creates and
+  // enters a quiz_session for the student's current chapter, for testing
+  // the quiz flow on demand. Reuses applyLessonProgressAdjustment's
+  // 'advance' branch directly, so the response has the exact same shape
+  // as a real Gemini-triggered quiz and the frontend needs no special
+  // handling for it.
+  if (!isAutoTrigger && userMsg.content.trim().toLowerCase() === 'quiz me now') {
+    const { rows: progRows } = await pool.query(
+      'SELECT subject_level, current_topic_index FROM user_progress WHERE user_id = $1',
+      [userId]
+    );
+    const bypassSubjectLevel = progRows[0]?.subject_level;
+    const bypassTopicIndex = progRows[0]?.current_topic_index || 0;
+    const bypassTopic = (CURRICULUM[bypassSubjectLevel] || [])[bypassTopicIndex];
+
+    let reply;
+    let quizAdjustment = null;
+
+    if (!bypassTopic) {
+      reply = "There's no current chapter to quiz you on yet.";
+    } else {
+      quizAdjustment = await applyLessonProgressAdjustment(userId, bypassSubjectLevel, bypassTopicIndex, 'advance');
+      reply = quizAdjustment && quizAdjustment.quiz_required
+        ? `Alright — let's see what you've got on ${bypassTopic.title}.`
+        : "There's no quiz written for this chapter yet.";
+    }
+
+    try {
+      await pool.query(
+        'INSERT INTO messages (user_id, conversation_id, role, content) VALUES ($1, $2, $3, $4)',
+        [userId, conversationId, 'user', userMsg.content]
+      );
+      await pool.query(
+        'INSERT INTO messages (user_id, conversation_id, role, content) VALUES ($1, $2, $3, $4)',
+        [userId, conversationId, 'assistant', reply]
+      );
+    } catch (err) {
+      console.error('Failed to save quiz-bypass messages:', err);
+    }
+
+    return res.json({ reply, topic_adjustment: quizAdjustment });
   }
 
   // ── Normal path ────────────────────────────────────────────────────

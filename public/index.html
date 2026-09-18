@@ -486,11 +486,62 @@
   .knowledge-map{
     margin-top:12px;padding:12px 14px;
     background:var(--bg-panel-alt);border:3px solid var(--border);
+    cursor:pointer;transition:background 0.1s;
   }
+  .knowledge-map:hover{background:var(--bg-panel);}
   .knowledge-map-label{
     font-family:var(--font-display);font-size:9px;letter-spacing:1px;
     text-transform:uppercase;color:var(--text-muted);margin:0 0 12px;
   }
+  .knowledge-map-hint{
+    font-family:var(--font-display);font-size:8px;color:var(--accent);
+    margin:12px 0 0;text-align:right;
+  }
+
+  /* Full-screen Knowledge Map (4 connected subject tracks) */
+  .km-full-card{
+    background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
+    padding:24px;width:100%;max-width:1100px;max-height:88vh;overflow-y:auto;
+  }
+  .km-full-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .km-full-title{font-family:var(--font-display);font-weight:400;font-size:14px;margin:0;}
+  .km-full-close{
+    background:var(--bg-panel-alt);color:var(--text);border:2px solid var(--border);
+    width:32px;height:32px;font-size:14px;cursor:pointer;box-shadow:var(--shadow-xs);
+  }
+  .km-full-close:hover{background:var(--accent-soft);}
+  .km-full-loading{font-family:var(--font-body);font-size:14px;color:var(--text-muted);}
+
+  .km-full-body{display:flex;flex-direction:column;}
+  .km-full-lane{display:flex;flex-direction:column;gap:8px;}
+  .km-full-lane-label{
+    font-family:var(--font-display);font-size:10px;color:var(--text-muted);
+    text-transform:uppercase;letter-spacing:1px;margin:0;
+  }
+  .km-full-row{display:flex;align-items:center;justify-content:space-between;}
+  .km-full-row.reverse{flex-direction:row-reverse;}
+  .km-full-node{
+    width:32px;height:32px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid var(--border);background:var(--bg-panel-alt);
+    font-family:var(--font-display);font-size:10px;color:var(--text-muted);
+    box-shadow:var(--shadow-xs);
+  }
+  .km-full-node.completed{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+  .km-full-node.active{background:var(--accent);border-color:var(--border);color:var(--accent-ink);box-shadow:var(--shadow-accent-xs);}
+  .km-full-node.locked{opacity:0.4;}
+  .km-full-tick{
+    flex:1 1 auto;height:2px;min-width:6px;margin:0 2px;
+    background:repeating-linear-gradient(90deg,var(--border) 0 3px,transparent 3px 6px);
+  }
+  .km-full-connector-wrap{display:flex;padding:2px 15px;}
+  .km-full-connector-wrap.right{justify-content:flex-end;}
+  .km-full-connector-wrap.left{justify-content:flex-start;}
+  .km-full-connector{
+    width:2px;height:14px;
+    background:repeating-linear-gradient(var(--border) 0 3px, transparent 3px 6px);
+  }
+
   /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
      squeezed the Math node until overflow-wrap broke subject names
      mid-word ("MA/TH"). A vertical list, like the .mini-stat rows just
@@ -785,6 +836,17 @@
   </div>
 </div>
 
+<!-- ── Full-screen Knowledge Map ────────────────────────────────────── -->
+<div class="overlay-bg hidden" id="knowledgeMapOverlay">
+  <div class="km-full-card">
+    <div class="km-full-header">
+      <p class="km-full-title">Knowledge Map</p>
+      <button class="km-full-close" id="knowledgeMapClose" type="button" aria-label="Close">✕</button>
+    </div>
+    <div class="km-full-body" id="knowledgeMapBody"></div>
+  </div>
+</div>
+
 <!-- ── Main app ──────────────────────────────────────────────────────── -->
 <div class="app" id="mainApp" style="display:none">
   <div class="app-header">
@@ -862,7 +924,7 @@
           <p class="mastery-score"><span id="masteryScore">0</span><span class="mastery-denom"> / 100</span></p>
           <p class="mastery-inputs" id="masteryInputs">Completion 0 · Progress 0 · Engagement 0 · Mastery 0</p>
         </div>
-        <div class="knowledge-map" aria-label="Knowledge map: Reading, Science, then Math">
+        <div class="knowledge-map" id="knowledgeMapBox" role="button" tabindex="0" aria-label="Knowledge map: Reading, Science, then Math — click for the full map">
           <p class="knowledge-map-label">Knowledge Map</p>
           <div class="km-path">
             <div class="km-node reading">
@@ -881,6 +943,7 @@
               <span class="km-level">Algebra II</span>
             </div>
           </div>
+          <p class="knowledge-map-hint">View full map →</p>
         </div>
         <div class="mini-stat"><span class="subject-dot reading"></span>Reading<strong>Grade 5</strong></div>
         <div class="mini-stat"><span class="subject-dot science"></span>Science<strong>Grade 8</strong></div>
@@ -1004,6 +1067,10 @@ const xpCaption      = document.getElementById('xpCaption');
 const levelReadout   = document.getElementById('levelReadout');
 const streakCount    = document.getElementById('streakCount');
 const memoryBtn      = document.getElementById('memoryBtn');
+const knowledgeMapBox     = document.getElementById('knowledgeMapBox');
+const knowledgeMapOverlay = document.getElementById('knowledgeMapOverlay');
+const knowledgeMapBody    = document.getElementById('knowledgeMapBody');
+const knowledgeMapClose   = document.getElementById('knowledgeMapClose');
 const questNavBtn    = document.getElementById('questNavBtn');
 const wishlistNavBtn = document.getElementById('wishlistNavBtn');
 const wishlistCount  = document.getElementById('wishlistCount');
@@ -2290,6 +2357,82 @@ resetBtn.addEventListener('click', function() {
 memoryBtn.addEventListener('click', function() {
   window.location.href = '/parent';
 });
+
+// ── Full-screen Knowledge Map ────────────────────────────────────────
+// 4 subject tracks stacked as one continuous chain: alternating lanes
+// render right-to-left (CSS row-reverse) so each lane's end lines up
+// under the next lane's start, instead of 4 disconnected lists.
+async function openKnowledgeMap() {
+  knowledgeMapOverlay.classList.remove('hidden');
+  knowledgeMapBody.innerHTML = '<p class="km-full-loading">Loading…</p>';
+  try {
+    const res = await fetch('/api/knowledge-map');
+    if (!res.ok) throw new Error('Could not load the knowledge map.');
+    const data = await res.json();
+    renderFullKnowledgeMap(data);
+  } catch (err) {
+    knowledgeMapBody.innerHTML = '<p class="km-full-loading">' + escapeHtml(err.message || 'Could not load the knowledge map.') + '</p>';
+  }
+}
+
+function renderFullKnowledgeMap(data) {
+  knowledgeMapBody.innerHTML = '';
+  const subjects = data.subjects || [];
+
+  subjects.forEach((subject, laneIdx) => {
+    const isReversed = laneIdx % 2 === 1;
+    const isCurrentSubject = subject.id === data.subject_level;
+
+    const lane = document.createElement('div');
+    lane.className = 'km-full-lane';
+
+    const label = document.createElement('p');
+    label.className = 'km-full-lane-label';
+    label.textContent = subject.label;
+    lane.appendChild(label);
+
+    const row = document.createElement('div');
+    row.className = 'km-full-row' + (isReversed ? ' reverse' : '');
+
+    subject.topics.forEach((topic, i) => {
+      if (i > 0) {
+        const tick = document.createElement('div');
+        tick.className = 'km-full-tick';
+        row.appendChild(tick);
+      }
+      const node = document.createElement('div');
+      node.className = 'km-full-node';
+      if (isCurrentSubject && i < data.current_topic_index) node.classList.add('completed');
+      else if (isCurrentSubject && i === data.current_topic_index) node.classList.add('active');
+      else node.classList.add('locked');
+      node.textContent = String(i + 1);
+      node.title = topic.objective ? `${topic.title}: ${topic.objective}` : 'Coming soon';
+      row.appendChild(node);
+    });
+
+    lane.appendChild(row);
+    knowledgeMapBody.appendChild(lane);
+
+    if (laneIdx < subjects.length - 1) {
+      const connectorWrap = document.createElement('div');
+      connectorWrap.className = 'km-full-connector-wrap ' + (isReversed ? 'left' : 'right');
+      const connector = document.createElement('div');
+      connector.className = 'km-full-connector';
+      connectorWrap.appendChild(connector);
+      knowledgeMapBody.appendChild(connectorWrap);
+    }
+  });
+}
+
+function closeKnowledgeMap() {
+  knowledgeMapOverlay.classList.add('hidden');
+}
+
+knowledgeMapBox.addEventListener('click', openKnowledgeMap);
+knowledgeMapBox.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKnowledgeMap(); }
+});
+knowledgeMapClose.addEventListener('click', closeKnowledgeMap);
 </script>
 
 </body>
