@@ -361,6 +361,9 @@
   .conv-tab.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
 
   .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
+  .messages[hidden]{display:none;}
+  .quiz-panel{flex:1;overflow-y:auto;padding:20px;}
+  .quiz-panel[hidden]{display:none;}
   .bubble{
     max-width:78%;padding:12px 15px;font-family:var(--font-body);font-size:15px;line-height:1.6;
     position:relative;border:3px solid var(--border);
@@ -429,6 +432,7 @@
   }
 
   .composer{display:flex;gap:8px;padding:14px 16px;border-top:3px solid var(--accent);}
+  .composer[hidden]{display:none;}
   .composer textarea{
     flex:1;background:var(--bg-panel-alt);border:3px solid var(--border);
     padding:10px 16px;color:var(--text);font-family:var(--font-body);font-size:15px;
@@ -825,6 +829,16 @@
         </div>
         <div class="conv-tabs" id="conversationTabs" aria-label="Past conversations"></div>
         <div class="messages" id="messages"></div>
+        <div class="quiz-panel" id="quizPanel" hidden>
+          <div class="ob-progress-header">
+            <span class="ob-step" id="quizStep">Question 1 of 10</span>
+            <div class="ob-bar"><div class="ob-bar-fill" id="quizBarFill" style="width:0%"></div></div>
+          </div>
+          <p class="ob-level-label" id="quizChapterLabel">Chapter Quiz</p>
+          <p class="ob-question" id="quizQuestion"></p>
+          <div class="ob-options" id="quizOptions"></div>
+          <button class="ob-continue hidden" id="quizContinue" type="button">Continue →</button>
+        </div>
         <form class="composer" id="composer">
           <textarea id="input" rows="1" placeholder="Ask Nova a question..." autocomplete="off"></textarea>
           <button type="submit" aria-label="Send">➔</button>
@@ -976,6 +990,13 @@ const messagesEl     = document.getElementById('messages');
 const composer       = document.getElementById('composer');
 const input          = document.getElementById('input');
 const sendBtn        = composer.querySelector('button[type="submit"]');
+const quizPanel       = document.getElementById('quizPanel');
+const quizStep        = document.getElementById('quizStep');
+const quizBarFill     = document.getElementById('quizBarFill');
+const quizChapterLabel = document.getElementById('quizChapterLabel');
+const quizQuestionEl  = document.getElementById('quizQuestion');
+const quizOptionsEl   = document.getElementById('quizOptions');
+const quizContinueBtn = document.getElementById('quizContinue');
 sendBtn.addEventListener('click', playClickBlip);
 const resetBtn       = document.getElementById('resetBtn');
 const xpFill         = document.getElementById('xpFill');
@@ -1017,6 +1038,15 @@ let currentTopicIndex = 0;
 let currentTopicObj = null;
 let conversations = [];
 let activeConversationId = null;
+
+// ── Quiz mode state ────────────────────────────────────────────────
+let quizActive = false;
+let quizSessionId = null;
+let quizChapterTitle = '';
+let quizQuestions = [];   // [{id, question, options}] — no correctIndex, server-graded only
+let quizAnswers = [];     // [{questionId, selectedIndex}]
+let quizCurrentIdx = 0;
+let quizSelectedIndex = null;
 let awaitingReply = false;
 let idleTimer = null;
 const ORIGINAL_TAB_TITLE = document.title;
@@ -1415,13 +1445,139 @@ async function refreshLessonMapData() {
 // calling adjust_lesson_progress) — updates the lesson map and, on a real
 // advance, shows a completion toast.
 function applyTopicAdjustment(adj) {
-  if (!adj || !adj.applied) return;
+  if (!adj) return;
+  if (adj.quiz_required) {
+    enterQuizMode(adj);
+    return;
+  }
+  if (!adj.applied) return;
   currentTopicIndex = adj.current_topic_index;
   currentTopicObj = adj.current_topic || currentTopicObj;
   renderLessonMap();
   if (adj.direction === 'advance' && adj.completed_topic) {
     celebrateToast('Topic complete: ' + adj.completed_topic.title + ' ✓');
   }
+}
+
+// ── In-chapter quiz (adapts the onboarding one-question-at-a-time MCQ
+// component — same .ob-* classes/flow — shown inline in the chat panel
+// instead of a full-screen overlay) ─────────────────────────────────
+function enterQuizMode(adj) {
+  quizActive = true;
+  quizSessionId = adj.quiz_session_id;
+  quizChapterTitle = adj.chapter_title || 'this chapter';
+  quizQuestions = adj.questions || [];
+  quizAnswers = [];
+  quizCurrentIdx = 0;
+  quizSelectedIndex = null;
+
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+
+  messagesEl.hidden = true;
+  composer.hidden = true;
+  quizPanel.hidden = false;
+  quizChapterLabel.textContent = 'Chapter Quiz · ' + quizChapterTitle;
+
+  showQuizQuestion(0);
+}
+
+function showQuizQuestion(idx) {
+  quizCurrentIdx = idx;
+  quizSelectedIndex = null;
+  const q = quizQuestions[idx];
+  const total = quizQuestions.length;
+
+  quizStep.textContent = `Question ${idx + 1} of ${total}`;
+  quizBarFill.style.width = `${(idx / total) * 100}%`;
+  quizQuestionEl.textContent = q.question;
+
+  quizOptionsEl.innerHTML = '';
+  q.options.forEach((text, optIdx) => {
+    const btn = document.createElement('button');
+    btn.className = 'ob-option';
+    btn.type = 'button';
+    btn.textContent = text;
+    btn.dataset.optionIndex = String(optIdx);
+    btn.addEventListener('click', () => selectQuizOption(optIdx));
+    quizOptionsEl.appendChild(btn);
+  });
+
+  quizContinueBtn.classList.add('hidden');
+  quizContinueBtn.disabled = false;
+}
+
+function selectQuizOption(optionIndex) {
+  quizSelectedIndex = optionIndex;
+  quizOptionsEl.querySelectorAll('.ob-option').forEach(btn => {
+    btn.classList.toggle('selected', Number(btn.dataset.optionIndex) === optionIndex);
+  });
+  quizContinueBtn.textContent = quizCurrentIdx < quizQuestions.length - 1 ? 'Continue →' : 'Submit quiz';
+  quizContinueBtn.classList.remove('hidden');
+  playClickBlip();
+}
+
+quizContinueBtn.addEventListener('click', async function() {
+  if (quizSelectedIndex === null) return;
+  const q = quizQuestions[quizCurrentIdx];
+  quizAnswers.push({ questionId: q.id, selectedIndex: quizSelectedIndex });
+
+  if (quizCurrentIdx < quizQuestions.length - 1) {
+    showQuizQuestion(quizCurrentIdx + 1);
+    return;
+  }
+
+  quizContinueBtn.disabled = true;
+  quizContinueBtn.textContent = 'Grading…';
+
+  try {
+    const res = await fetch('/api/quiz/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quiz_session_id: quizSessionId, answers: quizAnswers })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not grade the quiz.');
+    await exitQuizMode(data);
+  } catch (err) {
+    quizContinueBtn.disabled = false;
+    quizContinueBtn.textContent = 'Submit quiz';
+    toast(err.message || 'Could not grade the quiz.');
+  }
+});
+
+// Leaves quiz mode and reflects the graded result in the chat: on a pass,
+// celebrates, advances the lesson map, and switches into the new
+// auto-created conversation for the next chapter (which welcomes + auto-
+// triggers its own lesson start, same as "New topic"). On a fail, stays on
+// the same chapter/conversation and nudges Nova to continue right away —
+// the backend already knows which concepts were missed and steers the
+// next reply toward them.
+async function exitQuizMode(result) {
+  quizActive = false;
+  quizPanel.hidden = true;
+  messagesEl.hidden = false;
+  composer.hidden = false;
+
+  if (result.passed) {
+    renderMessage('assistant',
+      `Nice work — you scored ${result.score}/${result.total} on ${quizChapterTitle}. You're ready for the next chapter.`);
+    celebrateToast('Topic complete: ' + quizChapterTitle + ' ✓');
+    await refreshLessonMapData();
+    if (result.new_conversation) {
+      conversations.unshift(result.new_conversation);
+      activeConversationId = result.new_conversation.id;
+      renderConversationList();
+      await loadConversationHistory(activeConversationId);
+    }
+  } else {
+    renderMessage('assistant',
+      `You scored ${result.score}/${result.total} on ${quizChapterTitle} — not quite there yet. Let's go back over a few things.`);
+    input.focus();
+    setTimeout(() => sendAutoTrigger('idle_continue'), 2500);
+  }
+
+  resetIdleTimer();
 }
 
 // ── Onboarding ─────────────────────────────────────────────────────
@@ -1744,6 +1900,7 @@ function renderConversationList() {
 
 async function switchConversation(id) {
   if (id === activeConversationId) return;
+  if (quizActive) { toast('Finish the quiz first.'); return; }
   if (awaitingReply) { toast("Nova's still replying — one sec."); return; }
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
@@ -1756,6 +1913,7 @@ async function switchConversation(id) {
 // Starts a genuinely new, separate conversation — does not touch or hide
 // any earlier ones.
 async function startNewConversation() {
+  if (quizActive) { toast('Finish the quiz first.'); return; }
   if (awaitingReply) { toast("Nova's still replying — one sec."); return; }
   try {
     const res = await fetch('/api/conversations', { method: 'POST' });
@@ -1957,15 +2115,22 @@ function updateXpUI() {
 }
 
 // ── Idle-continue: nudge Nova to keep teaching after a quiet spell ─
-const IDLE_TIMEOUT_MS = 10000;
+const IDLE_TIMEOUT_MIN_MS = 10000;
+const IDLE_TIMEOUT_MAX_MS = 15000;
+
+// Re-rolled on every call (not fixed once per session) so the wait feels
+// human rather than like a metronome.
+function randomIdleTimeoutMs() {
+  return IDLE_TIMEOUT_MIN_MS + Math.random() * (IDLE_TIMEOUT_MAX_MS - IDLE_TIMEOUT_MIN_MS);
+}
 
 function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
-  if (activeView !== 'quest' || awaitingReply || !conversation.length) return;
+  if (activeView !== 'quest' || awaitingReply || quizActive || !conversation.length) return;
   idleTimer = setTimeout(() => {
-    if (!awaitingReply) sendAutoTrigger('idle_continue');
-  }, IDLE_TIMEOUT_MS);
+    if (!awaitingReply && !quizActive) sendAutoTrigger('idle_continue');
+  }, randomIdleTimeoutMs());
 }
 
 // Briefly flashes the tab title when Nova replies while the tab isn't

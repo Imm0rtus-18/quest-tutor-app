@@ -7,6 +7,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const { QUESTIONS, LEVEL_ORDER } = require('./questions');
 const { CURRICULUM } = require('./curriculum');
+const { QUIZZES } = require('./quizzes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -154,6 +155,16 @@ async function initDb() {
     SET conversation_id = b.id
     FROM backfill b
     WHERE m.conversation_id IS NULL AND m.user_id = b.user_id;
+    CREATE TABLE IF NOT EXISTS quiz_sessions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      chapter_id TEXT NOT NULL,
+      questions JSONB NOT NULL,
+      answers JSONB,
+      score INTEGER,
+      passed BOOLEAN,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS wishlist_items (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES user_progress(user_id) ON DELETE CASCADE,
@@ -616,19 +627,111 @@ function buildLessonFocusNote(currentTopic) {
   return `\n\nThe student's current lesson topic is "${currentTopic.title}": ${currentTopic.objective} Use this as the current teaching focus.`;
 }
 
+// If the student's most recent quiz attempt on their current chapter was a
+// fail, steer Nova toward re-teaching specifically what they missed instead
+// of repeating the whole chapter generically. Naturally stops applying once
+// they pass (current_topic_index moves on to a different chapter, so this
+// lookup no longer matches).
+async function buildRemediationNote(userId, currentTopic) {
+  if (!currentTopic) return '';
+  const { rows } = await pool.query(
+    `SELECT answers FROM quiz_sessions
+      WHERE user_id = $1 AND chapter_id = $2 AND passed = false
+      ORDER BY created_at DESC LIMIT 1`,
+    [userId, currentTopic.id]
+  );
+  const lastFailed = rows[0];
+  if (!lastFailed || !Array.isArray(lastFailed.answers)) return '';
+
+  const missedConcepts = [...new Set(
+    lastFailed.answers.filter(a => !a.correct).map(a => a.concept).filter(Boolean)
+  )];
+  if (!missedConcepts.length) return '';
+
+  return `\n\nThe student recently missed a quiz on this chapter, specifically on: ${missedConcepts.join(', ')}. Focus on re-teaching these specific gaps rather than repeating the whole chapter generically.`;
+}
+
 // Applies a lesson-progress move Nova requested via the adjust_lesson_progress
 // function call, clamped to valid topic indices, and persists it the same
 // way the "next level please" bypass persists subject_level changes.
+// Shuffles a quiz question's options at serve-time (same Fisher-Yates
+// helper as onboarding) and recomputes correctIndex to match the shuffled
+// order. The returned, already-shuffled version is what gets stored on
+// the quiz_sessions row, so grading always matches what the student
+// actually saw — never re-derived from the original bank order.
+function buildServedQuiz(bankQuestions) {
+  return bankQuestions.map(q => {
+    const correctText = q.options[q.correctIndex];
+    const options = shuffled(q.options);
+    return {
+      id: q.id,
+      chapterId: q.chapterId,
+      question: q.question,
+      options,
+      correctIndex: options.indexOf(correctText),
+      concept: q.concept
+    };
+  });
+}
+
+// Applies a lesson-progress move Nova requested via the adjust_lesson_progress
+// function call. 'repeat'/'back' still move current_topic_index directly and
+// persist it immediately, exactly as before. 'advance' no longer advances
+// directly — a "ready to move on" signal now creates a quiz_session for the
+// current chapter and tells the frontend to enter quiz mode; current_topic_index
+// only actually moves once the student passes (see POST /api/quiz/submit).
 async function applyLessonProgressAdjustment(userId, subjectLevel, currentIndex, direction) {
   const topics = CURRICULUM[subjectLevel] || [];
   if (!topics.length || !['advance', 'repeat', 'back'].includes(direction)) return null;
 
-  let newIndex = currentIndex;
-  if (direction === 'advance') newIndex = Math.min(currentIndex + 1, topics.length - 1);
-  else if (direction === 'back') newIndex = Math.max(currentIndex - 1, 0);
-  // 'repeat' leaves newIndex unchanged.
+  if (direction === 'advance') {
+    const currentTopic = topics[currentIndex];
+    if (!currentTopic) return null;
 
-  const advanced = direction === 'advance' && newIndex !== currentIndex;
+    const bankQuestions = QUIZZES[currentTopic.id];
+    if (!bankQuestions || !bankQuestions.length) {
+      // No quiz written for this chapter yet — fall back to the old
+      // direct-advance behavior so the student never gets stuck with
+      // no quiz to take.
+      const newIndex = Math.min(currentIndex + 1, topics.length - 1);
+      const advanced = newIndex !== currentIndex;
+      if (advanced) {
+        await pool.query(
+          'UPDATE user_progress SET current_topic_index = $1, updated_at = NOW() WHERE user_id = $2',
+          [newIndex, userId]
+        );
+      }
+      return {
+        direction,
+        applied: advanced,
+        previous_topic_index: currentIndex,
+        current_topic_index: newIndex,
+        completed_topic: advanced ? { id: currentTopic.id, title: currentTopic.title } : null,
+        current_topic: topics[newIndex] ? { id: topics[newIndex].id, title: topics[newIndex].title } : null
+      };
+    }
+
+    const servedQuestions = buildServedQuiz(bankQuestions);
+    const { rows } = await pool.query(
+      'INSERT INTO quiz_sessions (user_id, chapter_id, questions) VALUES ($1, $2, $3) RETURNING id',
+      [userId, currentTopic.id, JSON.stringify(servedQuestions)]
+    );
+
+    return {
+      direction,
+      applied: false,
+      quiz_required: true,
+      quiz_session_id: rows[0].id,
+      chapter_id: currentTopic.id,
+      chapter_title: currentTopic.title,
+      // Never send correctIndex to the client before grading.
+      questions: servedQuestions.map(q => ({ id: q.id, question: q.question, options: q.options }))
+    };
+  }
+
+  let newIndex = currentIndex;
+  if (direction === 'back') newIndex = Math.max(currentIndex - 1, 0);
+  // 'repeat' leaves newIndex unchanged.
 
   if (newIndex !== currentIndex) {
     await pool.query(
@@ -642,7 +745,7 @@ async function applyLessonProgressAdjustment(userId, subjectLevel, currentIndex,
     applied: newIndex !== currentIndex,
     previous_topic_index: currentIndex,
     current_topic_index: newIndex,
-    completed_topic: advanced ? { id: topics[currentIndex].id, title: topics[currentIndex].title } : null,
+    completed_topic: null,
     current_topic: topics[newIndex] ? { id: topics[newIndex].id, title: topics[newIndex].title } : null
   };
 }
@@ -1245,6 +1348,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   const currentTopic = topics[currentTopicIndex] || null;
 
   let systemPrompt = (SYSTEM_PROMPTS[subjectLevel] || SYSTEM_PROMPTS.algebra1) + buildLessonFocusNote(currentTopic);
+  systemPrompt += await buildRemediationNote(userId, currentTopic);
   if (trigger === 'start_lesson') {
     systemPrompt += `\n\n${START_LESSON_INSTRUCTION}`;
   } else if (trigger === 'idle_continue') {
@@ -1347,7 +1451,10 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
           topicAdjustment = await applyLessonProgressAdjustment(
             userId, subjectLevel, currentTopicIndex, fc.args && fc.args.direction
           );
-          result = topicAdjustment || { applied: false };
+          // Gemini only needs the outcome, not the actual quiz question
+          // text/options — that goes to the frontend separately via
+          // topic_adjustment below, not into the model's context.
+          result = topicAdjustment ? { ...topicAdjustment, questions: undefined } : { applied: false };
         } else {
           result = { found: false };
         }
@@ -1409,6 +1516,97 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Tutor request failed:', err);
     res.status(502).json({ error: 'Could not reach the tutor service. Please try again.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Quiz grading (deterministic — not LLM-judged, same approach as onboarding)
+// ---------------------------------------------------------------------------
+
+app.post('/api/quiz/submit', requireAuth, async (req, res) => {
+  const { quiz_session_id, answers } = req.body || {};
+  const sessionId = parseInt(quiz_session_id, 10);
+  if (!Number.isInteger(sessionId) || !Array.isArray(answers)) {
+    return res.status(400).json({ error: 'quiz_session_id and an answers array are required.' });
+  }
+
+  const userId = req.session.userId;
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, chapter_id, questions, passed FROM quiz_sessions WHERE id = $1 AND user_id = $2',
+      [sessionId, userId]
+    );
+    const session = rows[0];
+    if (!session) return res.status(404).json({ error: 'Quiz session not found.' });
+    if (session.passed !== null) {
+      return res.status(409).json({ error: 'This quiz has already been graded.' });
+    }
+
+    const questions = session.questions;
+    const answerByQid = new Map(answers.map(a => [a.questionId, a.selectedIndex]));
+
+    let correctCount = 0;
+    const gradedAnswers = questions.map(q => {
+      const selectedIndex = answerByQid.has(q.id) ? answerByQid.get(q.id) : null;
+      const correct = selectedIndex === q.correctIndex;
+      if (correct) correctCount++;
+      return { questionId: q.id, selectedIndex, correct, concept: q.concept };
+    });
+
+    const total = questions.length;
+    const passed = correctCount >= Math.ceil(total * 0.9); // 90%+ (9/10) = pass
+
+    await pool.query(
+      'UPDATE quiz_sessions SET answers = $1, score = $2, passed = $3 WHERE id = $4',
+      [JSON.stringify(gradedAnswers), correctCount, passed, sessionId]
+    );
+
+    let newTopic = null;
+    let newConversation = null;
+
+    if (passed) {
+      const { rows: progressRows } = await pool.query(
+        'SELECT subject_level, current_topic_index FROM user_progress WHERE user_id = $1',
+        [userId]
+      );
+      const progressRow = progressRows[0];
+      const subjectLevel = progressRow?.subject_level;
+      const topics = CURRICULUM[subjectLevel] || [];
+      const currentIndex = progressRow?.current_topic_index ?? 0;
+
+      // Only advance if this chapter is still actually the current one —
+      // guards against a stale/duplicate submission after the student has
+      // already moved on some other way.
+      if (topics[currentIndex] && topics[currentIndex].id === session.chapter_id) {
+        const newIndex = Math.min(currentIndex + 1, topics.length - 1);
+        if (newIndex !== currentIndex) {
+          await pool.query(
+            'UPDATE user_progress SET current_topic_index = $1, updated_at = NOW() WHERE user_id = $2',
+            [newIndex, userId]
+          );
+          newTopic = { id: topics[newIndex].id, title: topics[newIndex].title };
+
+          const { rows: convRows } = await pool.query(
+            'INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING id, title, created_at',
+            [userId, newTopic.title]
+          );
+          newConversation = convRows[0];
+        }
+      }
+    }
+
+    res.json({
+      passed,
+      score: correctCount,
+      total,
+      missed_concepts: passed ? [] : [...new Set(gradedAnswers.filter(a => !a.correct).map(a => a.concept))],
+      new_topic: newTopic,
+      new_conversation: newConversation
+    });
+  } catch (err) {
+    console.error('Quiz submit error:', err);
+    res.status(500).json({ error: 'Could not grade the quiz.' });
   }
 });
 
