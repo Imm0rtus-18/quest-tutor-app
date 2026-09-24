@@ -13,6 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 // Real channel IDs resolved from each channel's own live YouTube page
 // (externalId / canonical link), not typed from memory — YouTube channel IDs
@@ -33,6 +34,12 @@ const PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 // Automatic one-shot retry model used when the primary model is deprecated or unavailable.
 const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+
+// Last-resort fallback, one rung further out than the Gemini primary/
+// fallback pair above — only used when Gemini itself is failing (quota/
+// rate limit/overloaded), never for model-name deprecation. Verified
+// current on console.groq.com/docs/models before using it here.
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 const BCRYPT_ROUNDS = 12;
 const XP_PER_MESSAGE = 18;
@@ -453,6 +460,28 @@ function isModelUnavailableError(data) {
   return /no longer available|not found|deprecated|model.*unavailable/i.test(msg);
 }
 
+// Distinct from isModelUnavailableError above — this recognizes Gemini
+// itself being overloaded/rate-limited/out of quota (the only case that
+// should fall through to the Groq last-resort below), not a deprecated
+// model name, and not a genuine bad-request or auth error, which should
+// surface as a real error instead of silently rerouting to another
+// provider. 429 is always quota/rate-limit; 503 only counts if the
+// message actually says the model is overloaded (a 503 could mean other
+// things), matching Gemini's real error shapes: {error:{code:429,
+// status:"RESOURCE_EXHAUSTED",...}} and {error:{code:503,
+// status:"UNAVAILABLE", message:"The model is overloaded. Please try
+// again later."}}.
+function isProviderOverloadedError(response, data) {
+  const status = response && response.status;
+  const errStatus = (data && data.error && data.error.status) || '';
+  const msg = (data && data.error && data.error.message) || '';
+  if (status === 429 || errStatus === 'RESOURCE_EXHAUSTED') return true;
+  if (status === 503 || errStatus === 'UNAVAILABLE') {
+    return /overloaded|high demand|try again later/i.test(msg);
+  }
+  return /quota|rate limit|too many requests/i.test(msg);
+}
+
 // Lower-level call that takes an already Gemini-shaped `contents` array
 // directly — used by callGemini() below for the normal text-message path,
 // and directly by the function-calling round trip in /api/tutor, which needs
@@ -482,17 +511,125 @@ async function callGemini(model, systemPrompt, messages, tools) {
   return callGeminiRaw(model, systemPrompt, toGeminiContents(messages), tools);
 }
 
-// Calls PRIMARY_MODEL and, if (and only if) it's unavailable, retries once
+// ---------------------------------------------------------------------------
+// Groq — last-resort fallback when Gemini itself is failing (quota/rate
+// limit/overloaded), never for model-name deprecation (PRIMARY_MODEL/
+// FALLBACK_MODEL's own retry already covers that). OpenAI-compatible chat
+// completions endpoint — verified against console.groq.com/docs/api-reference
+// and .../tool-use before implementing, rather than assumed from training
+// knowledge.
+// ---------------------------------------------------------------------------
+
+// Our internal {role, content} messages -> OpenAI chat message format, with
+// the system prompt as its own leading message (Gemini keeps it separate
+// via system_instruction; OpenAI-style APIs fold it into the messages array).
+function toOpenAiMessages(systemPrompt, messages) {
+  return [
+    { role: 'system', content: systemPrompt },
+    ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
+  ];
+}
+
+// Our Gemini-shaped functionDeclarations tools -> OpenAI's tools/function
+// schema ({type:"function", function:{name, description, parameters}}).
+function toOpenAiTools(tools) {
+  if (!tools) return undefined;
+  const declarations = tools.flatMap(t => t.functionDeclarations || []);
+  return declarations.map(d => ({
+    type: 'function',
+    function: { name: d.name, description: d.description, parameters: d.parameters }
+  }));
+}
+
+// Only ever called after both Gemini models have failed with a provider-
+// overload error. Returns the exact same { response, data } shape callGemini
+// callers already expect — data.candidates[0].content.parts, each either
+// { text } or { functionCall: { name, args } } — by reshaping Groq's
+// OpenAI-style choices[0].message into it, so nothing downstream (function-
+// call handling, text extraction, markdown cleanup) needs to know or care
+// which provider actually answered.
+async function callGroqFallback(systemPrompt, messages, tools) {
+  if (!GROQ_API_KEY) {
+    return { response: { ok: false, status: 500 }, data: { error: { message: 'Groq fallback not configured (missing GROQ_API_KEY).' } } };
+  }
+
+  const body = {
+    model: GROQ_MODEL,
+    messages: toOpenAiMessages(systemPrompt, messages),
+    max_completion_tokens: 1000
+  };
+  const openAiTools = toOpenAiTools(tools);
+  if (openAiTools && openAiTools.length) body.tools = openAiTools;
+
+  let response, raw;
+  try {
+    response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify(body)
+    });
+    raw = await response.json();
+  } catch (err) {
+    return { response: { ok: false, status: 502 }, data: { error: { message: `Groq request failed: ${err.message}` } } };
+  }
+
+  if (!response.ok) {
+    return { response, data: raw };
+  }
+
+  const message = (raw.choices && raw.choices[0] && raw.choices[0].message) || {};
+  const parts = [];
+
+  if (Array.isArray(message.tool_calls)) {
+    for (const call of message.tool_calls) {
+      let args = {};
+      try {
+        args = JSON.parse(call.function.arguments || '{}');
+      } catch (err) {
+        console.error('Groq fallback: could not parse tool call arguments:', call.function.arguments, err);
+      }
+      parts.push({ functionCall: { name: call.function.name, args, id: call.id } });
+    }
+  }
+  if (message.content) {
+    parts.push({ text: message.content });
+  }
+
+  return { response, data: { candidates: [{ content: { parts } }] } };
+}
+
+// Calls PRIMARY_MODEL and, if it's unavailable or overloaded, retries once
 // with FALLBACK_MODEL — the one-shot retry shape shared by every Gemini call
 // site in this file. The model names themselves still only ever come from
 // the PRIMARY_MODEL/FALLBACK_MODEL constants above, never chosen here.
 // onFallback, if given, is called with the primary call's failed `data`
-// right before the fallback attempt (used for caller-specific logging).
+// right before the fallback attempt (used for caller-specific logging). If
+// Gemini is still failing after both models — specifically from being
+// overloaded/rate-limited, never a plain bad-request/auth error — Groq is
+// tried as one last rung; if Groq also fails, this falls through to return
+// the same Gemini failure the caller would already have gotten without
+// Groq existing, so no new failure states are introduced.
 async function callGeminiWithFallback(systemPrompt, messages, onFallback, tools) {
   let { response, data } = await callGemini(PRIMARY_MODEL, systemPrompt, messages, tools);
-  if (!response.ok && isModelUnavailableError(data)) {
+  if (!response.ok && (isModelUnavailableError(data) || isProviderOverloadedError(response, data))) {
     if (onFallback) onFallback(data);
     ({ response, data } = await callGemini(FALLBACK_MODEL, systemPrompt, messages, tools));
+  }
+
+  if (!response.ok && isProviderOverloadedError(response, data)) {
+    console.warn(
+      `Both Gemini models ("${PRIMARY_MODEL}"/"${FALLBACK_MODEL}") are overloaded/rate-limited ` +
+      `(${(data.error && data.error.message) || response.status}). Trying Groq fallback ("${GROQ_MODEL}").`
+    );
+    const groqResult = await callGroqFallback(systemPrompt, messages, tools);
+    if (groqResult.response.ok) {
+      console.warn(`Groq fallback ("${GROQ_MODEL}") answered successfully after Gemini was overloaded.`);
+      return groqResult;
+    }
+    console.error('Groq fallback also failed — returning the original Gemini overload error:', groqResult.data);
   }
   return { response, data };
 }
