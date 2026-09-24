@@ -617,6 +617,18 @@ const IDLE_CONTINUE_PROMPTS = [
   "The student has been idle for a moment. Give a brief, casual nudge to see if they're still around, then keep teaching."
 ];
 
+// Used only for the 3rd (final) consecutive idle_continue in a row — after
+// this, the frontend stops auto-nudging until the student sends a real
+// message, so this should read as a one-off personality beat, not another
+// teaching continuation. Several variants, picked at random, so it doesn't
+// read identically every time.
+const FINAL_IDLE_CONTINUE_PROMPTS = [
+  "This is the last check-in before you go quiet and wait for the student to come back on their own — you've already nudged them twice with no response. Write ONE short, human, in-character remark about waiting, calm and a little self-amused — like you're stepping away for a coffee while you wait. Keep it brief, one or two sentences. Do not teach anything in this message.",
+  "This is the last check-in before you go quiet and wait for the student to come back on their own — you've already nudged them twice with no response. Write ONE short, human, in-character remark, playfully cheeky about being ignored — never actually mean or discouraging, just funny. Keep it brief, one or two sentences. Do not teach anything in this message.",
+  "This is the last check-in before you go quiet and wait for the student to come back on their own — you've already nudged them twice with no response. Write ONE short, human, in-character remark with a light, amused shrug about the silence rather than annoyance. Keep it brief, one or two sentences. Do not teach anything in this message.",
+  "This is the last check-in before you go quiet and wait for the student to come back on their own — you've already nudged them twice with no response. Write ONE short, in-character, teasing remark about being left on read — playful, not annoyed. Keep it brief, one or two sentences. Do not teach anything in this message."
+];
+
 // Used once, right after the canned welcome message, to kick off a real
 // first lesson without the student having to type anything.
 const START_LESSON_INSTRUCTION =
@@ -1382,7 +1394,7 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     });
   }
 
-  const { messages, subject, trigger, conversation_id } = req.body || {};
+  const { messages, subject, trigger, final, conversation_id } = req.body || {};
 
   // Auto-triggers ('start_lesson' right after the welcome message,
   // 'idle_continue' after a quiet spell) carry no new real user text — the
@@ -1519,6 +1531,11 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
   systemPrompt += await buildRemediationNote(userId, currentTopic);
   if (trigger === 'start_lesson') {
     systemPrompt += `\n\n${START_LESSON_INSTRUCTION}`;
+  } else if (trigger === 'idle_continue' && final === true) {
+    // 3rd/final consecutive idle_continue — the frontend stops auto-nudging
+    // after this one, so it gets a distinct in-character remark instead of
+    // another teaching continuation.
+    systemPrompt += `\n\n${FINAL_IDLE_CONTINUE_PROMPTS[Math.floor(Math.random() * FINAL_IDLE_CONTINUE_PROMPTS.length)]}`;
   } else if (trigger === 'idle_continue') {
     systemPrompt += `\n\n${IDLE_CONTINUE_PROMPTS[Math.floor(Math.random() * IDLE_CONTINUE_PROMPTS.length)]}`;
   }

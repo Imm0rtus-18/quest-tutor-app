@@ -1112,6 +1112,10 @@ let quizCurrentIdx = 0;
 let quizSelectedIndex = null;
 let awaitingReply = false;
 let idleTimer = null;
+// Consecutive idle_continue auto-triggers since the student's last real
+// message — capped at 3, then idle-continue stops entirely until they
+// type something themselves (see resetIdleTimer/sendAutoTrigger below).
+let idleContinueCount = 0;
 const ORIGINAL_TAB_TITLE = document.title;
 
 // ── Sound effects (Web Audio API — synthesized, no audio files) ────
@@ -2191,6 +2195,9 @@ function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
   if (activeView !== 'quest' || awaitingReply || quizActive || !conversation.length) return;
+  // Capped at 3 consecutive idle_continue auto-triggers with no real
+  // engagement — stop rescheduling until a real message resets the count.
+  if (idleContinueCount >= 3) return;
   idleTimer = setTimeout(() => {
     if (!awaitingReply && !quizActive) sendAutoTrigger('idle_continue');
   }, randomIdleTimeoutMs());
@@ -2214,11 +2221,21 @@ async function sendAutoTrigger(trigger) {
   awaitingReply = true;
   showTyping();
 
+  // idleContinueCount is 0-indexed going into this call, so a value of 2
+  // means this is the 3rd (final) consecutive idle_continue.
+  const isFinalIdleContinue = trigger === 'idle_continue' && idleContinueCount === 2;
+
   try {
     const res = await fetch('/api/tutor', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: 'math', messages: conversation, trigger, conversation_id: activeConversationId })
+      body: JSON.stringify({
+        subject: 'math',
+        messages: conversation,
+        trigger,
+        final: isFinalIdleContinue,
+        conversation_id: activeConversationId
+      })
     });
     const data = await res.json();
     hideTyping();
@@ -2246,6 +2263,7 @@ async function sendAutoTrigger(trigger) {
       "I'm having trouble connecting right now. Mind trying that again in a moment?",
       { error: true });
   } finally {
+    if (trigger === 'idle_continue') idleContinueCount++;
     awaitingReply = false;
     resetIdleTimer();
   }
@@ -2255,6 +2273,7 @@ async function sendAutoTrigger(trigger) {
 async function sendMessage(text) {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
+  idleContinueCount = 0;
   awaitingReply = true;
 
   conversation.push({ role: 'user', content: text });
