@@ -4,6 +4,17 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Nova's Quest — Parent Portal</title>
+<script>
+// Applied before first paint so a saved dark-mode choice never flashes
+// light first — reads the same key the theme toggle writes, below.
+(function() {
+  try {
+    if (localStorage.getItem('novaTheme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch (e) { /* private mode etc. — default to light */ }
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -28,6 +39,23 @@
     --font-body:'Silkscreen', system-ui, sans-serif;
     --font-mono:'Silkscreen', monospace;
   }
+
+  /* Dark mode — same tokens, swapped values only. See public/index.html
+     for the full rationale (Discord-inspired structure, accent unchanged,
+     borders/shadows flip to a light tone instead of disappearing). */
+  :root[data-theme="dark"]{
+    --bg:#1E1F22;
+    --bg-panel:#2B2D31;
+    --bg-panel-alt:#35373C;
+    --accent-soft:rgba(216,54,42,0.25);
+    --text:#EDE6D8;
+    --text-muted:#A39C8E;
+    --border:#EDE6D8;
+    --shadow:4px 4px 0 var(--border), 8px 8px 0 rgba(0,0,0,0.4);
+    --shadow-sm:3px 3px 0 var(--border), 6px 6px 0 rgba(0,0,0,0.4);
+    --shadow-xs:2px 2px 0 var(--border), 4px 4px 0 rgba(0,0,0,0.4);
+  }
+
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;min-height:100%;}
   body{
@@ -56,6 +84,14 @@
   }
   .back-link:hover{background:var(--bg-panel-alt);}
   .back-link:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+  .icon-toggle{
+    background:var(--bg-panel);color:var(--text);
+    border:2px solid var(--border);
+    width:32px;height:32px;font-size:14px;line-height:1;cursor:pointer;
+    box-shadow:var(--shadow-xs);
+  }
+  .icon-toggle:hover{background:var(--bg-panel-alt);}
+  .icon-toggle:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
 
   .page-kicker{
     font-family:var(--font-display);font-size:9px;letter-spacing:1.5px;
@@ -169,6 +205,7 @@
     <div class="brand-star" aria-hidden="true"><svg class="nova-sprite" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="3" y="0" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="1" width="4" height="1" fill="#FAF6EF"/><rect x="1" y="2" width="6" height="1" fill="#FAF6EF"/><rect x="0" y="3" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="3" y="3" width="1" height="1" fill="#FAF6EF"/><rect x="4" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="5" y="3" width="3" height="1" fill="#FAF6EF"/><rect x="0" y="4" width="8" height="1" fill="#FAF6EF"/><rect x="1" y="5" width="6" height="1" fill="#FAF6EF"/><rect x="2" y="6" width="4" height="1" fill="#FAF6EF"/><rect x="3" y="7" width="2" height="1" fill="#FAF6EF"/></svg></div>
     <h2 class="brand-name">Nova's <span>Quest</span></h2>
     <a class="back-link" href="/">Back to app</a>
+    <button class="icon-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode" title="Dark mode">🌙</button>
   </div>
 
   <p class="page-kicker">Mission control for grown-ups</p>
@@ -360,6 +397,29 @@ async function load() {
 }
 
 load();
+
+// ── Dark mode ──────────────────────────────────────────────────────
+// The actual data-theme attribute is set as early as possible by the
+// inline script in <head> (before first paint, to avoid a light-mode
+// flash) — this just keeps the toggle icon in sync and handles clicks.
+const themeToggle = document.getElementById('themeToggle');
+function updateThemeToggleUI() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  themeToggle.textContent = isDark ? '☀' : '🌙';
+  themeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+}
+themeToggle.addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('novaTheme', 'light'); } catch (e) { /* non-critical */ }
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try { localStorage.setItem('novaTheme', 'dark'); } catch (e) { /* non-critical */ }
+  }
+  updateThemeToggleUI();
+});
+updateThemeToggleUI();
 </script>
 </body>
 </html>

@@ -4,6 +4,17 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Nova's Quest — Algebra II Prototype</title>
+<script>
+// Applied before first paint so a saved dark-mode choice never flashes
+// light first — reads the same key the theme toggle writes, below.
+(function() {
+  try {
+    if (localStorage.getItem('novaTheme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch (e) { /* private mode etc. — default to light */ }
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
@@ -31,6 +42,27 @@
     --font-display:'Press Start 2P', system-ui, sans-serif;
     --font-body:'Silkscreen', system-ui, sans-serif;
     --font-mono:'Silkscreen', monospace;
+  }
+
+  /* Dark mode — same tokens, swapped values only (no layout/shadow-shape
+     changes). Structure takes inspiration from Discord (dark charcoal, not
+     pure black; panels one step lighter than the page for layering), but
+     the red accent is identical in both modes, and borders/shadows flip to
+     a light tone instead of disappearing against the dark backgrounds —
+     hard block shadows stay a real visible design feature, not just
+     structurally present. */
+  :root[data-theme="dark"]{
+    --bg:#1E1F22;
+    --bg-panel:#2B2D31;
+    --bg-panel-alt:#35373C;
+    --accent-soft:rgba(216,54,42,0.25);
+    --text:#EDE6D8;
+    --text-muted:#A39C8E;
+    --border:#EDE6D8;
+    --shadow:4px 4px 0 var(--border), 8px 8px 0 rgba(0,0,0,0.4);
+    --shadow-sm:3px 3px 0 var(--border), 6px 6px 0 rgba(0,0,0,0.4);
+    --shadow-xs:2px 2px 0 var(--border), 4px 4px 0 rgba(0,0,0,0.4);
+    --shadow-accent-xs:2px 2px 0 var(--accent), 4px 4px 0 rgba(216,54,42,0.25);
   }
 
   *{box-sizing:border-box;}
@@ -206,14 +238,14 @@
   }
   .logout-btn:hover{background:var(--bg-panel-alt);}
   .logout-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
-  .sound-toggle{
+  .icon-toggle{
     background:var(--bg-panel);color:var(--text);
     border:2px solid var(--border);
     width:32px;height:32px;font-size:14px;line-height:1;cursor:pointer;
     box-shadow:var(--shadow-xs);
   }
-  .sound-toggle:hover{background:var(--bg-panel-alt);}
-  .sound-toggle:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+  .icon-toggle:hover{background:var(--bg-panel-alt);}
+  .icon-toggle:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
 
   .page-nav{
     display:flex;gap:8px;align-items:center;
@@ -673,6 +705,7 @@
     transition:transform 0.1s,box-shadow 0.1s;
   }
   .reward-card:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--border), 12px 12px 0 rgba(26,26,26,0.15);}
+  :root[data-theme="dark"] .reward-card:hover{box-shadow:6px 6px 0 var(--border), 12px 12px 0 rgba(0,0,0,0.4);}
   .reward-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px;}
   .reward-icon{
     width:42px;height:42px;display:flex;align-items:center;justify-content:center;
@@ -850,7 +883,8 @@
     <p class="eyebrow">Nova's Quest <span class="scope-tag" id="scopeTag"></span></p>
     <div class="header-right">
       <span class="username-label" id="usernameLabel"></span>
-      <button class="sound-toggle" id="soundToggle" type="button" aria-label="Mute sound effects" title="Sound effects">🔊</button>
+      <button class="icon-toggle" id="soundToggle" type="button" aria-label="Mute sound effects" title="Sound effects">🔊</button>
+      <button class="icon-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode" title="Dark mode">🌙</button>
       <button class="logout-btn" id="logoutBtn" type="button">Log out</button>
     </div>
   </div>
@@ -1043,6 +1077,7 @@ const startLearningBtn = document.getElementById('startLearningBtn');
 
 const usernameLabel  = document.getElementById('usernameLabel');
 const soundToggle    = document.getElementById('soundToggle');
+const themeToggle    = document.getElementById('themeToggle');
 const logoutBtn      = document.getElementById('logoutBtn');
 const questPath      = document.getElementById('questPath');
 const messagesEl     = document.getElementById('messages');
@@ -1168,6 +1203,28 @@ soundToggle.addEventListener('click', () => {
   updateSoundToggleUI();
 });
 updateSoundToggleUI();
+
+// ── Dark mode ──────────────────────────────────────────────────────
+// The actual data-theme attribute is set as early as possible by the
+// inline script in <head> (before first paint, to avoid a light-mode
+// flash) — this just keeps the toggle icon in sync and handles clicks.
+function updateThemeToggleUI() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  themeToggle.textContent = isDark ? '☀' : '🌙';
+  themeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+}
+themeToggle.addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('novaTheme', 'light'); } catch (e) { /* non-critical */ }
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try { localStorage.setItem('novaTheme', 'dark'); } catch (e) { /* non-critical */ }
+  }
+  updateThemeToggleUI();
+});
+updateThemeToggleUI();
 
 // ── App navigation ─────────────────────────────────────────────────
 questNavBtn.addEventListener('click', () => { playClickBlip(); navigateTo('quest'); });
@@ -2092,10 +2149,14 @@ function celebrateToast(msg) {
 }
 
 // Small colored-square confetti burst anchored to `anchorEl`, matching the
-// app's red/black/cream palette. Fully self-cleaning: every piece lives in
-// one container removed by a single timeout, so nothing is left in the DOM
-// once the ~1.5s animation finishes.
-const CONFETTI_COLORS = ['#D8362A', '#1A1A1A', '#FAF6EF', '#EDE5D4'];
+// app's red/black/cream palette (or the dark-mode equivalent). Fully
+// self-cleaning: every piece lives in one container removed by a single
+// timeout, so nothing is left in the DOM once the ~1.5s animation finishes.
+const CONFETTI_COLORS_LIGHT = ['#D8362A', '#1A1A1A', '#FAF6EF', '#EDE5D4'];
+const CONFETTI_COLORS_DARK = ['#D8362A', '#EDE6D8', '#2B2D31', '#35373C'];
+function getConfettiColors() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? CONFETTI_COLORS_DARK : CONFETTI_COLORS_LIGHT;
+}
 function spawnConfetti(anchorEl) {
   if (!anchorEl) return;
   const rect = anchorEl.getBoundingClientRect();
@@ -2106,11 +2167,12 @@ function spawnConfetti(anchorEl) {
   container.className = 'confetti-burst';
   document.body.appendChild(container);
 
+  const colors = getConfettiColors();
   const pieceCount = 18;
   for (let i = 0; i < pieceCount; i++) {
     const piece = document.createElement('span');
     piece.className = 'confetti-piece';
-    piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    piece.style.background = colors[i % colors.length];
     piece.style.left = originX + 'px';
     piece.style.top = originY + 'px';
     const dx = (Math.random() - 0.5) * 220;
