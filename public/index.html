@@ -1147,6 +1147,12 @@ let quizCurrentIdx = 0;
 let quizSelectedIndex = null;
 let awaitingReply = false;
 let idleTimer = null;
+// One-shot auto-trigger scheduling (start_lesson kickoffs, and the
+// immediate post-quiz-fail continue) — deliberately a SEPARATE tracked
+// timer from idleTimer's repeating idle-debounce, both scheduled only via
+// scheduleKickoff() below, so there's never an untracked setTimeout that
+// resetIdleTimer/cancelKickoff can't reach and clear.
+let kickoffTimer = null;
 // Consecutive idle_continue auto-triggers since the student's last real
 // message — capped at 3, then idle-continue stops entirely until they
 // type something themselves (see resetIdleTimer/sendAutoTrigger below).
@@ -1597,6 +1603,7 @@ function enterQuizMode(adj) {
 
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
+  cancelKickoff();
 
   messagesEl.hidden = true;
   composer.hidden = true;
@@ -1694,14 +1701,19 @@ async function exitQuizMode(result) {
       renderConversationList();
       await loadConversationHistory(activeConversationId);
     }
+    resetIdleTimer();
   } else {
     renderMessage('assistant',
       `You scored ${result.score}/${result.total} on ${quizChapterTitle} — not quite there yet. Let's go back over a few things.`);
     input.focus();
-    setTimeout(() => sendAutoTrigger('idle_continue'), 2500);
+    // scheduleKickoff alone — NOT also resetIdleTimer() here. Its own
+    // eventual completion (sendAutoTrigger's finally block) is what calls
+    // resetIdleTimer() to continue the normal idle cadence from there;
+    // calling it again immediately here used to schedule a second,
+    // parallel idle timer for the same "continue after this" moment,
+    // which is what let two idle_continue replies fire back to back.
+    scheduleKickoff('idle_continue', 2500);
   }
-
-  resetIdleTimer();
 }
 
 // ── Onboarding ─────────────────────────────────────────────────────
@@ -1982,7 +1994,7 @@ async function loadConversationHistory(conversationId) {
 
     // Empty conversation: kick off a real lesson automatically, without
     // waiting for the student to type first.
-    setTimeout(() => sendAutoTrigger('start_lesson'), 2500);
+    scheduleKickoff('start_lesson', 2500);
   }
 }
 
@@ -2028,6 +2040,7 @@ async function switchConversation(id) {
   if (awaitingReply) { toast("Nova's still replying — one sec."); return; }
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
+  cancelKickoff();
   activeConversationId = id;
   renderConversationList();
   await loadConversationHistory(id);
@@ -2062,7 +2075,7 @@ async function startNewConversation() {
   resetIdleTimer();
   // Like the very first login, don't make the student type first —
   // start a real lesson automatically.
-  setTimeout(() => sendAutoTrigger('start_lesson'), 2500);
+  scheduleKickoff('start_lesson', 2500);
 }
 
 // ── Chat helpers ───────────────────────────────────────────────────
@@ -2253,6 +2266,24 @@ function randomIdleTimeoutMs() {
   return IDLE_TIMEOUT_MIN_MS + Math.random() * (IDLE_TIMEOUT_MAX_MS - IDLE_TIMEOUT_MIN_MS);
 }
 
+// Schedules a one-shot auto-trigger (start_lesson, or the immediate
+// post-quiz-fail continue) via the single tracked kickoffTimer slot —
+// always clears any previously-scheduled kickoff first, so there is never
+// more than one pending at once and never an untracked setTimeout that
+// nothing can cancel.
+function scheduleKickoff(trigger, delayMs) {
+  if (kickoffTimer) clearTimeout(kickoffTimer);
+  kickoffTimer = setTimeout(() => {
+    kickoffTimer = null;
+    if (!awaitingReply && !quizActive) sendAutoTrigger(trigger);
+  }, delayMs);
+}
+
+function cancelKickoff() {
+  if (kickoffTimer) clearTimeout(kickoffTimer);
+  kickoffTimer = null;
+}
+
 function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
@@ -2327,6 +2358,7 @@ async function sendAutoTrigger(trigger) {
   } finally {
     if (trigger === 'idle_continue') idleContinueCount++;
     awaitingReply = false;
+    cancelKickoff();
     resetIdleTimer();
   }
 }
@@ -2335,6 +2367,7 @@ async function sendAutoTrigger(trigger) {
 async function sendMessage(text) {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
+  cancelKickoff();
   idleContinueCount = 0;
   awaitingReply = true;
 
