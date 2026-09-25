@@ -42,6 +42,12 @@
     --font-display:'Press Start 2P', system-ui, sans-serif;
     --font-body:'Silkscreen', system-ui, sans-serif;
     --font-mono:'Silkscreen', monospace;
+    /* Knowledge Map region tints — one per subject, subtle so the pixel
+       aesthetic still reads through. */
+    --km-tint-algebra1:rgba(216,54,42,0.07);
+    --km-tint-geometry:rgba(59,130,180,0.08);
+    --km-tint-algebra2:rgba(140,90,190,0.08);
+    --km-tint-precalc:rgba(56,150,110,0.08);
   }
 
   /* Dark mode — same tokens, swapped values only (no layout/shadow-shape
@@ -63,6 +69,10 @@
     --shadow-sm:3px 3px 0 var(--border), 6px 6px 0 rgba(0,0,0,0.4);
     --shadow-xs:2px 2px 0 var(--border), 4px 4px 0 rgba(0,0,0,0.4);
     --shadow-accent-xs:2px 2px 0 var(--accent), 4px 4px 0 rgba(216,54,42,0.25);
+    --km-tint-algebra1:rgba(216,54,42,0.14);
+    --km-tint-geometry:rgba(90,165,215,0.14);
+    --km-tint-algebra2:rgba(165,120,215,0.14);
+    --km-tint-precalc:rgba(80,190,140,0.14);
   }
 
   *{box-sizing:border-box;}
@@ -531,44 +541,93 @@
     margin:12px 0 0;text-align:right;
   }
 
-  /* Full-screen Knowledge Map — force-directed graph (d3-force + SVG) */
-  .km-full-card{
-    background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
-    padding:24px;width:100%;max-width:1300px;max-height:92vh;overflow-y:auto;
-  }
-  .km-full-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-  .km-full-title{font-family:var(--font-display);font-weight:400;font-size:14px;margin:0;}
-  .km-full-close{
-    background:var(--bg-panel-alt);color:var(--text);border:2px solid var(--border);
-    width:32px;height:32px;font-size:14px;cursor:pointer;box-shadow:var(--shadow-xs);
-  }
-  .km-full-close:hover{background:var(--accent-soft);}
-  .km-full-loading{font-family:var(--font-body);font-size:14px;color:var(--text-muted);}
+  /* Full-screen Knowledge Map — RPG/platformer world map. A true full
+     takeover (like onboarding/quizzes), not a centered popup card: the
+     canvas fills the whole overlay edge-to-edge, with a floating header,
+     zoom controls, and legend on top of it. 4 labeled regions, each a
+     winding path through its 12 nodes in sequence; cross-region
+     relationship lines layered underneath; pan/zoom via d3-zoom. */
+  .overlay-bg.km-fullscreen{padding:0;}
+  .km-view{width:100%;height:100%;position:relative;overflow:hidden;background:var(--bg);}
 
-  .km-full-body{width:100%;}
-  .km-graph-svg{width:100%;height:640px;display:block;background:var(--bg-panel-alt);border:2px solid var(--border);}
+  .km-view-header{
+    position:absolute;top:0;left:0;right:0;z-index:2;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;pointer-events:none;
+  }
+  .km-view-header > *{pointer-events:auto;}
+  .km-view-title{
+    font-family:var(--font-display);font-weight:400;font-size:14px;margin:0;
+    background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow-sm);
+    padding:10px 16px;
+  }
+  .km-view-close{
+    background:var(--bg-panel);color:var(--text);border:2px solid var(--border);
+    font-family:var(--font-display);font-size:10px;cursor:pointer;
+    padding:10px 16px;box-shadow:var(--shadow-sm);
+  }
+  .km-view-close:hover{background:var(--bg-panel-alt);}
+  .km-view-close:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+
+  .km-view-canvas{position:relative;width:100%;height:100%;touch-action:none;cursor:grab;}
+  .km-view-canvas:active{cursor:grabbing;}
+  .km-view-canvas svg{display:block;}
+  .km-full-loading{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-family:var(--font-body);font-size:14px;color:var(--text-muted);z-index:1;
+  }
+
+  .km-controls{position:absolute;bottom:16px;right:16px;z-index:2;display:flex;flex-direction:column;gap:6px;}
+  .km-zoom-btn{
+    width:36px;height:36px;background:var(--bg-panel);color:var(--text);
+    border:2px solid var(--border);font-family:var(--font-display);font-size:14px;
+    cursor:pointer;box-shadow:var(--shadow-xs);
+  }
+  .km-zoom-btn:hover{background:var(--bg-panel-alt);}
+  .km-zoom-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+  .km-reset-btn{
+    background:var(--bg-panel);color:var(--text);border:2px solid var(--border);
+    font-family:var(--font-display);font-size:8px;padding:8px 6px;cursor:pointer;box-shadow:var(--shadow-xs);
+  }
+  .km-reset-btn:hover{background:var(--bg-panel-alt);}
+  .km-reset-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+
+  .km-legend{
+    position:absolute;bottom:16px;left:16px;z-index:2;
+    display:flex;flex-wrap:wrap;gap:10px;max-width:min(90vw,520px);
+    background:var(--bg-panel);border:2px solid var(--border);box-shadow:var(--shadow-xs);
+    padding:10px 14px;font-family:var(--font-body);font-size:11px;color:var(--text-muted);
+  }
+  .km-legend-item{display:flex;align-items:center;gap:5px;}
+  .km-legend-swatch{width:12px;height:12px;border:2px solid var(--border);flex-shrink:0;}
+  .km-legend-swatch.completed{background:var(--accent-soft);border-color:var(--accent);}
+  .km-legend-swatch.active{background:var(--accent);}
+  .km-legend-swatch.locked{background:var(--bg-panel-alt);opacity:0.55;}
+  .km-legend-line{width:18px;height:0;border-top:3px solid var(--border);}
+  .km-legend-line.related{border-top:2px dashed var(--text-muted);}
+  .km-legend-line.convergence{border-top:2px dashed var(--accent);}
+
+  .km-region-label{
+    font-family:var(--font-display);font-size:20px;fill:var(--text-muted);
+    opacity:0.5;pointer-events:none;text-transform:uppercase;letter-spacing:2px;
+  }
+  .km-region-bg{stroke:none;}
+  .km-region-bg.algebra1{fill:var(--km-tint-algebra1);}
+  .km-region-bg.geometry{fill:var(--km-tint-geometry);}
+  .km-region-bg.algebra2{fill:var(--km-tint-algebra2);}
+  .km-region-bg.precalc{fill:var(--km-tint-precalc);}
   .km-graph-node{cursor:default;}
   .km-graph-rect{stroke:var(--border);stroke-width:2;fill:var(--bg-panel-alt);}
   .km-node-completed .km-graph-rect{fill:var(--accent-soft);stroke:var(--accent);}
   .km-node-active .km-graph-rect{fill:var(--accent);stroke:var(--border);}
   .km-node-locked .km-graph-rect{opacity:0.55;}
-  .km-graph-symbol{font-family:var(--font-body);font-size:14px;fill:var(--text);pointer-events:none;}
+  .km-graph-symbol{font-family:var(--font-body);font-size:18px;fill:var(--text);pointer-events:none;}
   .km-node-active .km-graph-symbol{fill:var(--accent-ink);}
   .km-node-completed .km-graph-symbol{fill:var(--accent);}
   .km-node-locked .km-graph-symbol{opacity:0.75;}
-  .km-link-sequential{stroke:var(--border);stroke-width:2.5;}
-  .km-link-related{stroke:var(--text-muted);stroke-width:1;stroke-dasharray:4 3;opacity:0.6;}
-  .km-link-convergence{stroke:var(--accent);stroke-width:2;stroke-dasharray:5 3;opacity:0.9;}
-
-  .km-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-family:var(--font-body);font-size:12px;color:var(--text-muted);}
-  .km-legend-item{display:flex;align-items:center;gap:6px;}
-  .km-legend-swatch{width:14px;height:14px;border:2px solid var(--border);flex-shrink:0;}
-  .km-legend-swatch.completed{background:var(--accent-soft);border-color:var(--accent);}
-  .km-legend-swatch.active{background:var(--accent);}
-  .km-legend-swatch.locked{background:var(--bg-panel-alt);opacity:0.55;}
-  .km-legend-line{width:22px;height:0;border-top:3px solid var(--border);}
-  .km-legend-line.related{border-top:2px dashed var(--text-muted);}
-  .km-legend-line.convergence{border-top:2px dashed var(--accent);}
+  .km-link-sequential{stroke:var(--border);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .km-link-related{stroke:var(--text-muted);stroke-width:1;stroke-dasharray:4 3;opacity:0.6;fill:none;}
+  .km-link-convergence{stroke:var(--accent);stroke-width:2;stroke-dasharray:5 3;opacity:0.9;fill:none;}
 
   /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
      squeezed the Math node until overflow-wrap broke subject names
@@ -865,14 +924,20 @@
   </div>
 </div>
 
-<!-- ── Full-screen Knowledge Map ────────────────────────────────────── -->
-<div class="overlay-bg hidden" id="knowledgeMapOverlay">
-  <div class="km-full-card">
-    <div class="km-full-header">
-      <p class="km-full-title">Knowledge Map</p>
-      <button class="km-full-close" id="knowledgeMapClose" type="button" aria-label="Close">✕</button>
+<!-- ── Full-screen Knowledge Map (RPG-style world map) ─────────────── -->
+<div class="overlay-bg hidden km-fullscreen" id="knowledgeMapOverlay">
+  <div class="km-view">
+    <div class="km-view-header">
+      <p class="km-view-title">Knowledge Map</p>
+      <button class="km-view-close" id="knowledgeMapClose" type="button" aria-label="Close">✕ Close</button>
     </div>
-    <div class="km-full-body" id="knowledgeMapBody"></div>
+    <div class="km-view-canvas" id="knowledgeMapBody"></div>
+    <div class="km-controls">
+      <button class="km-zoom-btn" id="kmZoomIn" type="button" aria-label="Zoom in">+</button>
+      <button class="km-zoom-btn" id="kmZoomOut" type="button" aria-label="Zoom out">−</button>
+      <button class="km-reset-btn" id="kmZoomReset" type="button">Reset view</button>
+    </div>
+    <div class="km-legend" id="knowledgeMapLegend"></div>
   </div>
 </div>
 
@@ -1102,6 +1167,10 @@ const knowledgeMapBox     = document.getElementById('knowledgeMapBox');
 const knowledgeMapOverlay = document.getElementById('knowledgeMapOverlay');
 const knowledgeMapBody    = document.getElementById('knowledgeMapBody');
 const knowledgeMapClose   = document.getElementById('knowledgeMapClose');
+const knowledgeMapLegend  = document.getElementById('knowledgeMapLegend');
+const kmZoomInBtn    = document.getElementById('kmZoomIn');
+const kmZoomOutBtn   = document.getElementById('kmZoomOut');
+const kmZoomResetBtn = document.getElementById('kmZoomReset');
 const questNavBtn    = document.getElementById('questNavBtn');
 const wishlistNavBtn = document.getElementById('wishlistNavBtn');
 const wishlistCount  = document.getElementById('wishlistCount');
@@ -2469,11 +2538,22 @@ memoryBtn.addEventListener('click', function() {
 });
 
 // ── Full-screen Knowledge Map ────────────────────────────────────────
-// A real d3-force graph: all 4 subjects' chapters as nodes, laid out by
-// physics simulation (link/charge/center/collide forces) rather than a
-// fixed layout, so the 48 nodes settle organically into a web shaped by
-// their real connections — each subject's own sequential chain plus the
-// curated cross-subject edges from the backend.
+// An RPG/platformer-style world map: 4 labeled regions (one per subject),
+// each subject's 12 chapters laid out along a fixed winding path in real
+// sequential order (stepping-stones through a level, not a force-directed
+// scatter), with the same curated cross-subject relationship lines drawn
+// underneath as dashed/lighter connectors between regions. Pan/pinch/
+// scroll-zoom via d3-zoom, plus +/-/reset buttons. Same node data, hover
+// tooltips, and completed/active/locked states as before — only the
+// layout and page-level presentation changed.
+const KM_REGION_WIDTH = 1700;
+const KM_REGION_HEIGHT = 460;
+const KM_REGION_MARGIN_X = 140;
+const KM_NODE_SIZE = 44;
+let kmSvgSelection = null;
+let kmZoomBehavior = null;
+let kmResetTransform = null;
+
 async function openKnowledgeMap() {
   knowledgeMapOverlay.classList.remove('hidden');
   knowledgeMapBody.innerHTML = '<p class="km-full-loading">Loading…</p>';
@@ -2489,60 +2569,105 @@ async function openKnowledgeMap() {
 
 function renderFullKnowledgeMap(data) {
   knowledgeMapBody.innerHTML = '';
+  knowledgeMapLegend.innerHTML = '';
 
-  const width = knowledgeMapBody.clientWidth || 1000;
-  const height = 640;
-  const NODE_SIZE = 30;
+  const subjects = data.subjects || [];
+  const totalHeight = KM_REGION_HEIGHT * Math.max(subjects.length, 1);
 
-  // Flatten all 4 subjects' topics into one node list, with the node's
-  // progress state derived the same way as before: only the student's
-  // actual current subject gets completed/active coloring, everything
-  // else (including all of Geometry/Algebra 2/Pre-Calc for now) is locked.
+  // Flatten all 4 subjects' topics into one node list with FIXED positions
+  // along a winding path per region (alternating direction per region, like
+  // a boustrophedon trail) — not force-simulated. Progress state is derived
+  // the same way as before: only the student's actual current subject gets
+  // completed/active coloring, everything else stays locked.
   const nodes = [];
-  (data.subjects || []).forEach(subject => {
+  const nodeById = new Map();
+  subjects.forEach((subject, regionIdx) => {
     const isCurrentSubject = subject.id === data.subject_level;
-    subject.topics.forEach((topic, i) => {
+    const topics = subject.topics || [];
+    const count = topics.length;
+    const reverse = regionIdx % 2 === 1;
+    const usableWidth = KM_REGION_WIDTH - KM_REGION_MARGIN_X * 2;
+    const regionTop = regionIdx * KM_REGION_HEIGHT;
+    const centerY = regionTop + KM_REGION_HEIGHT / 2;
+    const amplitude = KM_REGION_HEIGHT * 0.26;
+
+    topics.forEach((topic, i) => {
+      const t = count > 1 ? i / (count - 1) : 0;
+      const xRatio = reverse ? (1 - t) : t;
+      const x = KM_REGION_MARGIN_X + xRatio * usableWidth;
+      const y = centerY + Math.sin(t * Math.PI * 2.4) * amplitude;
+
       let state = 'locked';
       if (isCurrentSubject && i < data.current_topic_index) state = 'completed';
       else if (isCurrentSubject && i === data.current_topic_index) state = 'active';
-      nodes.push({
-        id: topic.id,
-        subjectLabel: subject.label,
-        title: topic.title,
-        objective: topic.objective,
-        symbol: topic.symbol || '•',
-        state
-      });
+
+      const node = {
+        id: topic.id, subjectId: subject.id, subjectLabel: subject.label,
+        title: topic.title, objective: topic.objective, symbol: topic.symbol || '•',
+        state, seq: i, x, y
+      };
+      nodes.push(node);
+      nodeById.set(node.id, node);
     });
   });
 
-  const nodeIds = new Set(nodes.map(n => n.id));
-  const links = (data.edges || [])
-    .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
-    .map(e => ({ source: e.source, target: e.target, kind: e.kind || 'related' }));
+  const edges = (data.edges || []).filter(e => nodeById.has(e.source) && nodeById.has(e.target));
+  const crossEdges = edges.filter(e => e.kind !== 'sequential');
+
+  const width = knowledgeMapBody.clientWidth || 1200;
+  const height = knowledgeMapBody.clientHeight || 700;
 
   const svg = d3.select(knowledgeMapBody).append('svg')
-    .attr('class', 'km-graph-svg')
-    .attr('viewBox', `0 0 ${width} ${height}`);
+    .attr('width', width).attr('height', height);
 
-  const linkSel = svg.append('g')
-    .selectAll('line')
-    .data(links)
+  const zoomLayer = svg.append('g').attr('class', 'km-zoom-layer');
+
+  // Region background bands + labels, drawn first so everything else
+  // layers on top.
+  subjects.forEach((subject, regionIdx) => {
+    zoomLayer.append('rect')
+      .attr('class', 'km-region-bg ' + subject.id)
+      .attr('x', 0).attr('y', regionIdx * KM_REGION_HEIGHT)
+      .attr('width', KM_REGION_WIDTH).attr('height', KM_REGION_HEIGHT);
+    zoomLayer.append('text')
+      .attr('class', 'km-region-label')
+      .attr('x', KM_REGION_MARGIN_X * 0.5)
+      .attr('y', regionIdx * KM_REGION_HEIGHT + 46)
+      .text(subject.label);
+  });
+
+  // Cross-region relationship lines (dashed/lighter, convergence thicker +
+  // accent-colored) — drawn under the within-region path.
+  zoomLayer.selectAll('.km-cross-edge')
+    .data(crossEdges)
     .join('line')
-    .attr('class', d => 'km-link-' + d.kind);
+    .attr('class', d => 'km-link-' + d.kind)
+    .attr('x1', d => nodeById.get(d.source).x).attr('y1', d => nodeById.get(d.source).y)
+    .attr('x2', d => nodeById.get(d.target).x).attr('y2', d => nodeById.get(d.target).y);
 
-  const nodeSel = svg.append('g')
-    .selectAll('g')
+  // Within-region winding path — one smooth curve through each region's 12
+  // nodes in real sequential order, like stepping stones through a level.
+  const lineGen = d3.line().x(d => d.x).y(d => d.y).curve(d3.curveCatmullRom.alpha(0.6));
+  subjects.forEach(subject => {
+    const regionNodes = nodes.filter(n => n.subjectId === subject.id).sort((a, b) => a.seq - b.seq);
+    if (regionNodes.length > 1) {
+      zoomLayer.append('path')
+        .attr('class', 'km-link-sequential')
+        .attr('d', lineGen(regionNodes));
+    }
+  });
+
+  // Nodes
+  const nodeSel = zoomLayer.selectAll('.km-graph-node')
     .data(nodes)
     .join('g')
-    .attr('class', d => 'km-graph-node km-node-' + d.state);
+    .attr('class', d => 'km-graph-node km-node-' + d.state)
+    .attr('transform', d => `translate(${d.x},${d.y})`);
 
   nodeSel.append('rect')
     .attr('class', 'km-graph-rect')
-    .attr('width', NODE_SIZE)
-    .attr('height', NODE_SIZE)
-    .attr('x', -NODE_SIZE / 2)
-    .attr('y', -NODE_SIZE / 2);
+    .attr('width', KM_NODE_SIZE).attr('height', KM_NODE_SIZE)
+    .attr('x', -KM_NODE_SIZE / 2).attr('y', -KM_NODE_SIZE / 2);
 
   nodeSel.append('text')
     .attr('class', 'km-graph-symbol')
@@ -2553,24 +2678,26 @@ function renderFullKnowledgeMap(data) {
   nodeSel.append('title')
     .text(d => `${d.subjectLabel} — ${d.title}: ${d.objective}`);
 
-  const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id)
-      .distance(l => l.kind === 'sequential' ? 50 : 110)
-      .strength(l => l.kind === 'sequential' ? 0.9 : 0.2))
-    .force('charge', d3.forceManyBody().strength(-110))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collide', d3.forceCollide(NODE_SIZE / 2 + 6));
+  // Pan (drag) + zoom (scroll/pinch), applied to the whole zoomLayer group.
+  kmZoomBehavior = d3.zoom()
+    .scaleExtent([0.25, 3])
+    .on('zoom', event => zoomLayer.attr('transform', event.transform));
+  svg.call(kmZoomBehavior);
 
-  simulation.on('tick', () => {
-    linkSel
-      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
-  });
+  // Initial view: fit the region width to the viewport, centered on the
+  // student's current subject/region so they land somewhere meaningful.
+  const fitScale = Math.min(3, Math.max(0.25, (width / KM_REGION_WIDTH) * 0.92));
+  const currentRegionIdx = Math.max(0, subjects.findIndex(s => s.id === data.subject_level));
+  const focusY = currentRegionIdx * KM_REGION_HEIGHT + KM_REGION_HEIGHT / 2;
+  kmResetTransform = d3.zoomIdentity
+    .translate(width / 2, height / 2)
+    .scale(fitScale)
+    .translate(-KM_REGION_WIDTH / 2, -focusY);
+  svg.call(kmZoomBehavior.transform, kmResetTransform);
 
-  const legend = document.createElement('div');
-  legend.className = 'km-legend';
-  legend.innerHTML = `
+  kmSvgSelection = svg;
+
+  knowledgeMapLegend.innerHTML = `
     <span class="km-legend-item"><span class="km-legend-swatch completed"></span>Completed</span>
     <span class="km-legend-item"><span class="km-legend-swatch active"></span>Current</span>
     <span class="km-legend-item"><span class="km-legend-swatch locked"></span>Locked / no progress yet</span>
@@ -2578,7 +2705,6 @@ function renderFullKnowledgeMap(data) {
     <span class="km-legend-item"><span class="km-legend-line related"></span>Related topic, another subject</span>
     <span class="km-legend-item"><span class="km-legend-line convergence"></span>Multiple subjects converge here</span>
   `;
-  knowledgeMapBody.appendChild(legend);
 }
 
 function closeKnowledgeMap() {
@@ -2590,6 +2716,18 @@ knowledgeMapBox.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKnowledgeMap(); }
 });
 knowledgeMapClose.addEventListener('click', closeKnowledgeMap);
+
+kmZoomInBtn.addEventListener('click', () => {
+  if (kmSvgSelection && kmZoomBehavior) kmSvgSelection.transition().duration(200).call(kmZoomBehavior.scaleBy, 1.4);
+});
+kmZoomOutBtn.addEventListener('click', () => {
+  if (kmSvgSelection && kmZoomBehavior) kmSvgSelection.transition().duration(200).call(kmZoomBehavior.scaleBy, 1 / 1.4);
+});
+kmZoomResetBtn.addEventListener('click', () => {
+  if (kmSvgSelection && kmZoomBehavior && kmResetTransform) {
+    kmSvgSelection.transition().duration(300).call(kmZoomBehavior.transform, kmResetTransform);
+  }
+});
 </script>
 
 </body>
