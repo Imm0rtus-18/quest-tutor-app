@@ -1,0 +1,722 @@
+[
+  {
+    "id": "algebra1-01-q1",
+    "concept": "order-of-operations-pemdas",
+    "status": "MATCH",
+    "detail": "computed 12, options=[\"13\",\"10\",\"12\",\"14\"], matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-01-q2",
+    "concept": "evaluating-expressions-by-substitution",
+    "status": "MATCH",
+    "detail": "computed 23 with {\"x\":4}, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-01-q3",
+    "concept": "translating-sum-phrases",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-01-q4",
+    "concept": "less-than-phrase-order-reversal",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-01-q5",
+    "concept": "variables-as-unknowns",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-01-q6",
+    "concept": "order-of-operations-with-exponents",
+    "status": "MATCH",
+    "detail": "computed 50, options=[\"50\",\"80\",\"400\",\"26\"], matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-01-q7",
+    "concept": "translating-product-and-difference-phrases",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-01-q8",
+    "concept": "order-of-operations-left-to-right",
+    "status": "MATCH",
+    "detail": "computed 25, options=[\"1\",\"25\",\"10\",\"20\"], matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-01-q9",
+    "concept": "evaluating-multi-term-expressions",
+    "status": "MATCH",
+    "detail": "computed 11 with {\"a\":2,\"b\":6}, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-01-q10",
+    "concept": "translating-quotient-and-sum-phrases",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-02-q1",
+    "concept": "absolute-value-basics",
+    "status": "MATCH",
+    "detail": "computed 12, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-02-q2",
+    "concept": "adding-signed-numbers",
+    "status": "MATCH",
+    "detail": "computed -3, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-02-q3",
+    "concept": "subtracting-negative-numbers",
+    "status": "MATCH",
+    "detail": "computed 15, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-02-q4",
+    "concept": "commutative-property-identification",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-02-q5",
+    "concept": "associative-property-identification",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-02-q6",
+    "concept": "applying-distributive-property",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-02-q7",
+    "concept": "additive-inverse",
+    "status": "MATCH",
+    "detail": "computed 7, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-02-q8",
+    "concept": "multiplicative-inverse",
+    "status": "MATCH",
+    "detail": "computed 0.25, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-02-q9",
+    "concept": "combining-signed-number-operations",
+    "status": "MATCH",
+    "detail": "computed 10, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-02-q10",
+    "concept": "identity-property-of-multiplication",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-03-q1",
+    "concept": "one-step-equations-addition-subtraction",
+    "status": "MATCH",
+    "detail": "computed x=8, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-03-q2",
+    "concept": "one-step-equations-multiplication-division",
+    "status": "MATCH",
+    "detail": "computed x=7, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-03-q3",
+    "concept": "two-step-equations",
+    "status": "MATCH",
+    "detail": "computed x=7, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-03-q4",
+    "concept": "multi-step-equations-with-distribution",
+    "status": "MATCH",
+    "detail": "computed x=9, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-03-q5",
+    "concept": "multi-step-equations-distribute-and-both-sides",
+    "status": "MATCH",
+    "detail": "computed x=11, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-03-q6",
+    "concept": "equations-variable-terms-both-sides",
+    "status": "MATCH",
+    "detail": "computed x=6, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-03-q7",
+    "concept": "addition-property-of-equality",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-03-q8",
+    "concept": "multiplication-property-of-equality",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-03-q9",
+    "concept": "equations-with-negative-coefficients",
+    "status": "MATCH",
+    "detail": "computed x=3, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-03-q10",
+    "concept": "verifying-solutions-by-substitution",
+    "status": "MATCH",
+    "detail": "LHS=7, RHS=7, isYes=true, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-04-q1",
+    "concept": "reading-ordered-pairs",
+    "status": "MATCH",
+    "detail": "computed -5, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-04-q2",
+    "concept": "finding-x-intercepts",
+    "status": "MATCH",
+    "detail": "x-intercept x=3, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-04-q3",
+    "concept": "finding-y-intercepts",
+    "status": "MATCH",
+    "detail": "y-intercept y=9, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-04-q4",
+    "concept": "computing-slope-from-two-points",
+    "status": "MATCH",
+    "detail": "computed slope 2, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-04-q5",
+    "concept": "slope-with-negative-values",
+    "status": "MATCH",
+    "detail": "computed slope -2, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-04-q6",
+    "concept": "identifying-slope-from-slope-intercept-form",
+    "status": "MATCH",
+    "detail": "slope=4, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-04-q7",
+    "concept": "identifying-y-intercept-from-slope-intercept-form",
+    "status": "MATCH",
+    "detail": "y-intercept=5, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-04-q8",
+    "concept": "interpreting-zero-slope",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-04-q9",
+    "concept": "interpreting-slope-sign-from-graph-direction",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-04-q10",
+    "concept": "verifying-points-on-a-line",
+    "status": "MATCH",
+    "detail": "tested each point, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-05-q1",
+    "concept": "writing-point-slope-form",
+    "status": "MATCH",
+    "detail": "point-slope numeric check at x=9 expects y=16, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-05-q2",
+    "concept": "converting-point-slope-to-slope-intercept",
+    "status": "MATCH",
+    "detail": "numeric check at x=11 expects y=26, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-05-q3",
+    "concept": "slope-from-two-points-for-writing-equations",
+    "status": "MATCH",
+    "detail": "computed slope 3, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-05-q4",
+    "concept": "writing-equation-from-two-points",
+    "status": "MATCH",
+    "detail": "computed y = 3x + 2, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-05-q5",
+    "concept": "parallel-lines-same-slope",
+    "status": "MATCH",
+    "detail": "expected slope=5, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-05-q6",
+    "concept": "perpendicular-lines-negative-reciprocal-slope",
+    "status": "MATCH",
+    "detail": "expected slope=-0.5, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-05-q7",
+    "concept": "perpendicular-lines-with-negative-slope",
+    "status": "MATCH",
+    "detail": "expected slope=0.25, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-05-q8",
+    "concept": "identifying-parallel-slopes",
+    "status": "MATCH",
+    "detail": "matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-05-q9",
+    "concept": "identifying-perpendicular-slopes",
+    "status": "MATCH",
+    "detail": "matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-05-q10",
+    "concept": "point-slope-form-with-negative-values",
+    "status": "MATCH",
+    "detail": "point-slope numeric check at x=9 expects y=-27, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-06-q1",
+    "concept": "one-step-inequalities-addition-subtraction",
+    "status": "MATCH",
+    "detail": "computed x > 6, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-06-q2",
+    "concept": "flipping-inequality-sign",
+    "status": "MATCH",
+    "detail": "computed x > -4, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-06-q3",
+    "concept": "flipping-inequality-with-negative-one",
+    "status": "MATCH",
+    "detail": "computed x <= -5, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-06-q4",
+    "concept": "two-step-inequalities",
+    "status": "MATCH",
+    "detail": "computed x <= 5, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-06-q5",
+    "concept": "open-vs-closed-circle-notation",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-06-q6",
+    "concept": "closed-circle-identification",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-06-q7",
+    "concept": "dashed-vs-solid-boundary-lines",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-06-q8",
+    "concept": "shading-inequality-regions",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-06-q9",
+    "concept": "graphing-solved-inequalities",
+    "status": "MATCH",
+    "detail": "computed x < 3 (open, shaded left), matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-06-q10",
+    "concept": "testing-solutions-to-inequalities",
+    "status": "MATCH",
+    "detail": "tested each option, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-07-q1",
+    "concept": "graphical-meaning-of-system-solution",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-07-q2",
+    "concept": "systems-with-no-solution",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-07-q3",
+    "concept": "systems-with-infinite-solutions",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-07-q4",
+    "concept": "solving-systems-by-substitution",
+    "status": "MATCH",
+    "detail": "computed (4, 7), matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-07-q5",
+    "concept": "substitution-with-coefficients",
+    "status": "MATCH",
+    "detail": "computed (3, 5), matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-07-q6",
+    "concept": "solving-systems-by-elimination",
+    "status": "MATCH",
+    "detail": "computed (8, 4), matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-07-q7",
+    "concept": "elimination-with-matching-coefficients",
+    "status": "MATCH",
+    "detail": "computed (3, 4), matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-07-q8",
+    "concept": "preparing-equations-for-elimination",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-07-q9",
+    "concept": "solution-region-for-systems-of-inequalities",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-07-q10",
+    "concept": "choosing-substitution-vs-elimination",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-08-q1",
+    "concept": "product-rule-of-exponents",
+    "status": "MATCH",
+    "detail": "product rule expects 3^6=729, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-08-q2",
+    "concept": "quotient-rule-of-exponents",
+    "status": "MATCH",
+    "detail": "quotient rule expects x^4, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-08-q3",
+    "concept": "power-of-a-power-rule",
+    "status": "MATCH",
+    "detail": "power-of-power expects x^12, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-08-q4",
+    "concept": "zero-exponent-rule",
+    "status": "MATCH",
+    "detail": "computed 1, options=[\"0\",\"1\",\"7\",\"undefined\"], matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-08-q5",
+    "concept": "negative-exponent-rule",
+    "status": "MATCH",
+    "detail": "negative-exponent rule expects 1/x^3, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-08-q6",
+    "concept": "evaluating-negative-exponents",
+    "status": "MATCH",
+    "detail": "computed 0.25, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-08-q7",
+    "concept": "identifying-growth-vs-decay",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-08-q8",
+    "concept": "interpreting-exponential-function-parameters",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-08-q9",
+    "concept": "applying-exponential-growth-models",
+    "status": "MATCH",
+    "detail": "computed 968.0000000000001, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-08-q10",
+    "concept": "recognizing-exponential-decay-equations",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-09-q1",
+    "concept": "parabola-direction-from-leading-coefficient",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-09-q2",
+    "concept": "graphical-meaning-of-quadratic-roots",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-09-q3",
+    "concept": "solving-quadratics-by-factoring",
+    "status": "MATCH",
+    "detail": "a=1,b=-7,c=12, roots=[4,3], matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-09-q4",
+    "concept": "factoring-with-negative-constant-term",
+    "status": "MATCH",
+    "detail": "a=1,b=2,c=-15, roots=[3,-5], matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-09-q5",
+    "concept": "identifying-the-discriminant-formula",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-09-q6",
+    "concept": "using-discriminant-to-count-solutions",
+    "status": "MATCH",
+    "detail": "a=1,b=-4,c=4, discriminant=0, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-09-q7",
+    "concept": "applying-the-quadratic-formula",
+    "status": "MATCH",
+    "detail": "a=1,b=6,c=5, roots=[-1,-5], matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-09-q8",
+    "concept": "quadratic-formula-with-non-integer-solutions",
+    "status": "MATCH",
+    "detail": "a=2,b=-5,c=-3, roots=[3,-0.5], matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-09-q9",
+    "concept": "negative-discriminant-meaning",
+    "status": "MATCH",
+    "detail": "disc=-8, expects \"No real solutions\", matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-09-q10",
+    "concept": "identifying-standard-form-of-a-quadratic",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-10-q1",
+    "concept": "adding-polynomials",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-10-q2",
+    "concept": "subtracting-polynomials",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-10-q3",
+    "concept": "multiplying-binomials-foil",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-10-q4",
+    "concept": "foil-with-mixed-signs",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-10-q5",
+    "concept": "factoring-out-the-gcf",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-10-q6",
+    "concept": "factoring-trinomials-positive-terms",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-10-q7",
+    "concept": "factoring-trinomials-negative-constant",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-10-q8",
+    "concept": "difference-of-squares-factoring",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-10-q9",
+    "concept": "recognizing-difference-of-squares",
+    "status": "MATCH",
+    "detail": "matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-10-q10",
+    "concept": "distributing-a-monomial-over-a-polynomial",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-11-q1",
+    "concept": "simplifying-rational-expressions-by-factoring",
+    "status": "MATCH",
+    "detail": "numeric-identity check at x=17,-19,23, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-11-q2",
+    "concept": "identifying-domain-restrictions",
+    "status": "MATCH",
+    "detail": "denom=\"x - 2\", roots=[2], matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-11-q3",
+    "concept": "domain-restrictions-with-factorable-denominators",
+    "status": "MATCH",
+    "detail": "denom=\"x^2 - 9\", roots=[3,-3], matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-11-q4",
+    "concept": "multiplying-rational-expressions",
+    "status": "MATCH",
+    "detail": "numeric check at x=17,23, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-11-q5",
+    "concept": "dividing-rational-expressions",
+    "status": "MATCH",
+    "detail": "numeric check at x=17,23, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-11-q6",
+    "concept": "adding-rational-expressions-same-denominator",
+    "status": "MATCH",
+    "detail": "numeric check at x=17,23, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-11-q7",
+    "concept": "adding-rational-expressions-different-denominators",
+    "status": "MATCH",
+    "detail": "numeric check at x=17,23, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-11-q8",
+    "concept": "solving-rational-equations-by-cross-multiplying",
+    "status": "MATCH",
+    "detail": "cross-multiplied, x=3, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-11-q9",
+    "concept": "solving-rational-equations-with-variable-denominators",
+    "status": "MATCH",
+    "detail": "cross-multiplied, x=3, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-11-q10",
+    "concept": "checking-solutions-against-domain-restrictions",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  },
+  {
+    "id": "algebra1-12-q1",
+    "concept": "simplifying-square-roots",
+    "status": "MATCH",
+    "detail": "simplified = 5√2, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-12-q2",
+    "concept": "simplifying-square-roots-larger-numbers",
+    "status": "MATCH",
+    "detail": "simplified = 7√2, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-12-q3",
+    "concept": "combining-like-radicals",
+    "status": "MATCH",
+    "detail": "numeric value 22.360679774997898, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-12-q4",
+    "concept": "combining-unlike-radicals-after-simplifying",
+    "status": "MATCH",
+    "detail": "numeric value 7.0710678118654755, matchedIdx=2, correctIndex=2"
+  },
+  {
+    "id": "algebra1-12-q5",
+    "concept": "multiplying-radicals",
+    "status": "MATCH",
+    "detail": "numeric value 5.999999999999999, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-12-q6",
+    "concept": "pythagorean-theorem-finding-hypotenuse",
+    "status": "MATCH",
+    "detail": "hypotenuse=13, matchedIdx=3, correctIndex=3"
+  },
+  {
+    "id": "algebra1-12-q7",
+    "concept": "pythagorean-theorem-finding-a-leg",
+    "status": "MATCH",
+    "detail": "leg=12, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-12-q8",
+    "concept": "using-the-distance-formula",
+    "status": "MATCH",
+    "detail": "distance=5, matchedIdx=1, correctIndex=1"
+  },
+  {
+    "id": "algebra1-12-q9",
+    "concept": "distance-formula-with-negative-coordinates",
+    "status": "MATCH",
+    "detail": "distance=13, matchedIdx=0, correctIndex=0"
+  },
+  {
+    "id": "algebra1-12-q10",
+    "concept": "identifying-the-pythagorean-theorem-formula",
+    "status": "NOT_COMPUTABLE",
+    "detail": "conceptual/definitional or unmatched pattern — needs human review"
+  }
+]
