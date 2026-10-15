@@ -53,22 +53,29 @@ function getIslandStops(islandData) {
 
 // World layout: islands placed clockwise from bottom-left — algebra1
 // (bottom-left) -> geometry (top-left) -> algebra2 (top-right) -> precalc
-// (bottom-right) — each island is 24x20 tiles (384x320px at 16px/tile),
-// with a 220px open-water gap between them for bridges/ferry and the
-// central gate. worldX/worldY are each island's top-left corner in this
-// shared coordinate space.
+// (bottom-right) — each island is 24x20 tiles (384x320px at 16px/tile).
+// A 260px margin (16+ tiles — well past the required 6) separates every
+// island from the world edge: the camera's "always fill the screen,
+// centered" zoom necessarily crops into the world on whichever axis
+// doesn't determine the cover scale, and for a ~16:9 browser window
+// that crop reaches roughly 250px into the world from each edge, so
+// anything short of this margin lets a wide window's initial framing
+// clip an island. A 170px gap separates the islands from each other and
+// from the central gate (closest island corner to the gate center is
+// ~120px away, clearing the gate's ~100px visual footprint). worldX/
+// worldY are each island's top-left corner in this shared space.
 const KM_WORLD = {
-  width: 988,
-  height: 860,
-  gateX: 494,
-  gateY: 430
+  width: 1458,
+  height: 1330,
+  gateX: 729,
+  gateY: 665
 };
 
 const KM_ISLANDS = {
   'algebra1': {
     label: 'Algebra I',
     terrain: 'meadow',
-    worldX: 0, worldY: 540,
+    worldX: 260, worldY: 750,
     entry: { col: 11, row: 17 },
     exit: { col: 11, row: 2 },
     grid: [
@@ -97,7 +104,7 @@ const KM_ISLANDS = {
   'geometry': {
     label: 'Geometry',
     terrain: 'canyon',
-    worldX: 0, worldY: 0,
+    worldX: 260, worldY: 260,
     entry: { col: 11, row: 17 },
     exit: { col: 20, row: 5 },
     grid: [
@@ -126,7 +133,7 @@ const KM_ISLANDS = {
   'algebra2': {
     label: 'Algebra II',
     terrain: 'sky',
-    worldX: 604, worldY: 0,
+    worldX: 814, worldY: 260,
     entry: { col: 4, row: 6 },
     exit: { col: 12, row: 17 },
     grid: [
@@ -155,7 +162,7 @@ const KM_ISLANDS = {
   'precalc': {
     label: 'Pre-Calculus',
     terrain: 'snow',
-    worldX: 604, worldY: 540,
+    worldX: 814, worldY: 750,
     entry: { col: 12, row: 2 },
     exit: { col: 9, row: 17 },
     grid: [

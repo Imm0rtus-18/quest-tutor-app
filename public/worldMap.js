@@ -357,25 +357,69 @@
     };
   }
 
-  function renderConnection(svg, conn, theme) {
+  // Rope bridge: a row of wooden plank tiles between the two anchor
+  // points, with a rope rail running the full length on each side. Drawn
+  // in a local (rotated) coordinate space so it reads correctly at any
+  // angle, then positioned with a single translate+rotate — the first
+  // and last planks sit exactly on the anchor points, so it connects
+  // cleanly to the path tile at both ends.
+  function renderBridge(svg, a, b) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+    const g = document.createElementNS(svgNS, 'g');
+    g.setAttribute('class', 'km-rope-bridge');
+    g.setAttribute('transform', `translate(${a.x},${a.y}) rotate(${angle})`);
+
+    const plankW = 16, deckWidth = 16, gap = 4;
+    const count = Math.max(2, Math.round(length / (plankW + gap)));
+    const span = length / count;
+    const actualPlankW = span - gap;
+    for (let i = 0; i < count; i++) {
+      const plank = document.createElementNS(svgNS, 'rect');
+      plank.setAttribute('x', i * span);
+      plank.setAttribute('y', -deckWidth / 2);
+      plank.setAttribute('width', actualPlankW);
+      plank.setAttribute('height', deckWidth);
+      plank.setAttribute('class', 'km-bridge-plank');
+      g.appendChild(plank);
+    }
+    [-1, 1].forEach(side => {
+      const rope = document.createElementNS(svgNS, 'line');
+      rope.setAttribute('x1', 0); rope.setAttribute('y1', side * (deckWidth / 2 + 2));
+      rope.setAttribute('x2', length); rope.setAttribute('y2', side * (deckWidth / 2 + 2));
+      rope.setAttribute('class', 'km-bridge-rope');
+      g.appendChild(rope);
+    });
+
+    svg.appendChild(g);
+  }
+
+  function renderFerry(svg, a, b) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+    line.setAttribute('class', 'km-ferry-line');
+    svg.appendChild(line);
+
+    const dock = document.createElementNS(svgNS, 'circle');
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    dock.setAttribute('cx', mid.x); dock.setAttribute('cy', mid.y);
+    dock.setAttribute('r', 7);
+    dock.setAttribute('class', 'km-ferry-dock');
+    svg.appendChild(dock);
+  }
+
+  function renderConnection(svg, conn) {
     const fromIsland = KM_ISLANDS[conn.from.island];
     const toIsland = KM_ISLANDS[conn.to.island];
     const a = tileCenterWorld(fromIsland, conn.from);
     const b = tileCenterWorld(toIsland, conn.to);
-    const isFerry = conn.type === 'ferry';
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
-    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
-    line.setAttribute('class', isFerry ? 'km-ferry-line' : 'km-bridge-line');
-    svg.appendChild(line);
-    if (isFerry) {
-      const dock = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      dock.setAttribute('cx', mid.x); dock.setAttribute('cy', mid.y);
-      dock.setAttribute('r', 7);
-      dock.setAttribute('class', 'km-ferry-dock');
-      svg.appendChild(dock);
-    }
+    if (conn.type === 'ferry') renderFerry(svg, a, b);
+    else renderBridge(svg, a, b);
   }
 
   function renderGate(svg) {
@@ -589,7 +633,7 @@
     svg.setAttribute('height', WORLD_PX_H);
     world.appendChild(svg);
 
-    KM_CONNECTIONS.forEach(conn => renderConnection(svg, conn, theme));
+    KM_CONNECTIONS.forEach(conn => renderConnection(svg, conn));
     const gateEl = renderGate(svg);
 
     const bossLit = {};

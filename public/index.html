@@ -587,9 +587,13 @@
   .km-ambient-cloud{z-index:3;}
   .km-island-overlay{z-index:4;}
 
-  .km-bridge-line{stroke:#7a5a34;stroke-width:5;stroke-linecap:round;}
+  .km-bridge-plank{fill:#9c7a4e;stroke:#5a4328;stroke-width:1.5;}
+  .km-bridge-rope{stroke:#4a3824;stroke-width:3;stroke-linecap:round;}
+  :root[data-theme="dark"] .km-bridge-plank{fill:#4a3828;stroke:#2a2014;}
+  :root[data-theme="dark"] .km-bridge-rope{stroke:#241c12;}
   .km-ferry-line{stroke:var(--text-muted);stroke-width:2;stroke-dasharray:3 5;opacity:0.8;}
   .km-ferry-dock{fill:#7a5a34;stroke:var(--border);stroke-width:1.5;}
+  :root[data-theme="dark"] .km-ferry-dock{fill:#4a3828;}
 
   .km-gate-whirlpool{fill:none;stroke:var(--text-muted);stroke-width:3;stroke-dasharray:6 8;opacity:0.4;}
   .km-gate-ring{fill:none;stroke:#8a7a68;stroke-width:9;}
@@ -598,8 +602,12 @@
   .km-gate-socket.lit{fill:var(--accent);stroke:var(--accent);}
 
   .km-island-canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
+  /* Draped over the island's own top edge (not floating above it in the
+     open water) — "above the island" clipped for the top-row islands at
+     the camera's default framing, and floating banners risked crossing
+     a bridge anchor; inset placement works identically for all four. */
   .km-island-banner{
-    position:absolute;top:-34px;left:50%;transform:translateX(-50%);
+    position:absolute;top:6px;left:50%;transform:translateX(-50%);
     display:flex;gap:8px;align-items:center;white-space:nowrap;
     background:var(--bg-panel);border:2px solid var(--border);box-shadow:var(--shadow-xs);
     padding:5px 10px;font-family:var(--font-display);font-size:9px;
