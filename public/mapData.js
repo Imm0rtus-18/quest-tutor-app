@@ -10,7 +10,15 @@
 
 const KM_TILE_SIZE = 16;
 
-// Single-character tile codes used in each island's grid rows.
+// Single-character tile codes used in each island's grid rows. The 12
+// stop markers ('1'-'9','A'-'C', in that order) sit directly on top of
+// path tiles in the grid itself — the single source of truth for a
+// stop's position, so pixel coordinates can never drift from the
+// terrain actually drawn on the path. They render identically to plain
+// path tiles ('p'); getIslandStops() below is the only thing that reads
+// them.
+const KM_STOP_MARKERS = '123456789ABC';
+
 const KM_TILE_LEGEND = {
   '.': 'water',
   's': 'sand',
@@ -25,6 +33,23 @@ const KM_TILE_LEGEND = {
   'l': 'cloud',
   'o': 'platform'
 };
+for (const ch of KM_STOP_MARKERS) KM_TILE_LEGEND[ch] = 'path';
+
+// Scans an island's grid for the stop markers and returns them in order
+// (index 0 = '1', ... index 11 = 'C') as {col,row} tile coordinates.
+// This is the only place stop positions come from — callers must not
+// keep their own copy, so a stop's position can never fall out of sync
+// with the path tile it actually sits on.
+function getIslandStops(islandData) {
+  const found = new Array(KM_STOP_MARKERS.length).fill(null);
+  islandData.grid.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) {
+      const idx = KM_STOP_MARKERS.indexOf(row[c]);
+      if (idx !== -1) found[idx] = { col: c, row: r };
+    }
+  });
+  return found.filter(Boolean);
+}
 
 // World layout: islands placed clockwise from bottom-left — algebra1
 // (bottom-left) -> geometry (top-left) -> algebra2 (top-right) -> precalc
@@ -49,26 +74,25 @@ const KM_ISLANDS = {
     grid: [
     '........................',
     '...........s..s.........',
-    '.......s.sspssgsss......',
+    '.......s.ssCssgsss......',
     '.......ssgggpgggggs.....',
     '....ssstgtgetpggggs.....',
     '.....stggggggpgtgptss...',
-    '....spppppgggpgeppggs...',
-    '...sggpeggpggpgptpgggs..',
-    '..sgegpggggpgpptgpgggs..',
-    '..sgegpggggpppgggpggggs.',
+    '....sppppAgggpgeppggs...',
+    '...sggpeggpggBgpt4gggs..',
+    '..sgeg9ggggpgpptgpgggs..',
+    '..sgegpggggpp3gggpggggs.',
     '..sggepggggptpgggptggs..',
     '...sggpggggpgggggpgggs..',
-    '...sggpgggepgggggpggs...',
-    '...sggpggegpgtgegpggs...',
-    '....sgpppppppppppppggs..',
+    '...sggpggge2ggggg5ggs...',
+    '...sgg8ggegpgtgegpggs...',
+    '....sgppp7ppppp6pppggs..',
     '.....spsgggptgtgggsss...',
     '......s.sggpgggses......',
-    '........ssspegs.s.......',
+    '........sss1egs.s.......',
     '...........sss..........',
     '........................'
-    ],
-    stops: [{ col: 11, row: 17 }, { col: 11, row: 12 }, { col: 13, row: 9 }, { col: 17, row: 7 }, { col: 17, row: 12 }, { col: 15, row: 14 }, { col: 9, row: 14 }, { col: 6, row: 13 }, { col: 6, row: 8 }, { col: 9, row: 6 }, { col: 13, row: 7 }, { col: 11, row: 2 }]
+    ]
   },
   'geometry': {
     label: 'Geometry',
@@ -82,23 +106,22 @@ const KM_ISLANDS = {
     '.............r..........',
     '........rrrrrfrrrr......',
     '.....rrrcfffffffffr.....',
-    '....rffcfffcccfffpfrp...',
-    '....rpppppffcffcppfpcr..',
+    '....rffcfffcccfffpfrC...',
+    '....rpppApffcffcp4fpcr..',
     '....rfpfffpffffpfppfcr..',
-    '....rrpffcfpffpcfpfcffr.',
-    '..rrfcpffffpppffppfrfcfr',
-    '..rfccpcfffpfpppfpcfcffr',
-    '..rfffpffffpfffffpfcfcfr',
-    '...rcfpffffpfffffpfffcr.',
-    '...rffpfffcpffffcpfcfr..',
-    '....rrpppppppppppppffr..',
+    '....rr9ffcfpffpcfpfcffr.',
+    '..rrfcpffffpp3ffppfrfcfr',
+    '..rfccpcfffpfpBpfpcfcffr',
+    '..rfffpffffpfffff5fcfcfr',
+    '...rcfpffff2fffffpfffcr.',
+    '...rff8fffcpffffcpfcfr..',
+    '....rrppp7pppppp6ppffr..',
     '....r.pccfcpcfffffrrr...',
     '.......rcffpfrffcfr.r...',
-    '.......rrrrprffrrr......',
+    '.......rrrr1rffrrr......',
     '...........r.rr.........',
     '........................'
-    ],
-    stops: [{ col: 11, row: 17 }, { col: 11, row: 12 }, { col: 13, row: 9 }, { col: 17, row: 6 }, { col: 17, row: 11 }, { col: 16, row: 14 }, { col: 9, row: 14 }, { col: 6, row: 13 }, { col: 6, row: 8 }, { col: 8, row: 6 }, { col: 14, row: 10 }, { col: 20, row: 5 }]
+    ]
   },
   'algebra2': {
     label: 'Algebra II',
@@ -113,22 +136,21 @@ const KM_ISLANDS = {
     '.......llllloollll......',
     '......lloloooolool......',
     '......loooooooooopl.....',
-    '....ppppppllloooppol....',
-    '...llopooppooloplpolll..',
+    '....1ppppAlllooop4ol....',
+    '...llopoo2pooloplpolll..',
     '..loolpoooppoopoopool...',
-    '.loooopoooopppooopoool..',
+    '.loooopoooopp3ooopoool..',
     '.loloopoooooopolopooll..',
-    '.looolpooloolpooopooll..',
+    '.loool9ooloolBooo5ooll..',
     '.loooopoooolopooopoool..',
     '..looopoooooopolopolol..',
-    '.llooopppppppppppppol...',
+    '.llooop8pppp7ppp6ppol...',
     '...llopoooooopollooll...',
     '...llooooooooplooll.....',
-    '.....llooolopooll.......',
+    '.....lloooloCooll.......',
     '.......llolllol.........',
     '.......l.l...l..........'
-    ],
-    stops: [{ col: 4, row: 6 }, { col: 9, row: 7 }, { col: 13, row: 9 }, { col: 17, row: 6 }, { col: 17, row: 11 }, { col: 16, row: 14 }, { col: 12, row: 14 }, { col: 7, row: 14 }, { col: 6, row: 11 }, { col: 9, row: 6 }, { col: 13, row: 11 }, { col: 12, row: 17 }]
+    ]
   },
   'precalc': {
     label: 'Pre-Calculus',
@@ -139,26 +161,25 @@ const KM_ISLANDS = {
     grid: [
     '........................',
     '........................',
-    '..........rrprr.r.......',
+    '..........rr1rr.r.......',
     '......rrrrnnpfnrnr......',
     '......rnrnnnpnfnnnrr....',
     '...rrrfnnnnnpnrnrpfnr...',
-    '....rpppppnrpnnnppnnr...',
-    '...rrfpnnnpnpnnpnpnnrr..',
-    '...rrnprnnnppnprrpnnnr..',
+    '....rpppApnrpnnnppnnr...',
+    '...rrfpnnnpn2nnpn4nnrr..',
+    '...rrn9rnnnppn3rrpnnnr..',
     '...rnnpnnnnpppnnnpnnnr..',
     '...rfrpnnnnnnpnrnpnnnr..',
-    '...rfnpnnnnnfprnnpnfnr..',
-    '...rnnpnnnnnrpnnnpnnnnr.',
-    '....rnpnnnffnpnfnpnrrr..',
-    '...rrfppppppppppppprrr..',
+    '...rfnpnnnnnfBrnnpnfnr..',
+    '...rnnpnnnnnrpnnn5nnnnr.',
+    '....rn8nnnffnpnfnpnrrr..',
+    '...rrfppp7ppppp6ppprrr..',
     '.....rpnnnnpnnnnnnrr....',
     '.......rfnpnrnrnrr......',
-    '........rprrfnrr........',
+    '........rCrrfnrr........',
     '............rr..........',
     '........................'
-    ],
-    stops: [{ col: 12, row: 2 }, { col: 12, row: 7 }, { col: 14, row: 8 }, { col: 17, row: 7 }, { col: 17, row: 12 }, { col: 15, row: 14 }, { col: 9, row: 14 }, { col: 6, row: 13 }, { col: 6, row: 8 }, { col: 8, row: 6 }, { col: 13, row: 11 }, { col: 9, row: 17 }]
+    ]
   }
 };
 
@@ -174,5 +195,5 @@ const KM_CONNECTIONS = [
 ];
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { KM_TILE_SIZE, KM_TILE_LEGEND, KM_WORLD, KM_ISLANDS, KM_CONNECTIONS };
+  module.exports = { KM_TILE_SIZE, KM_STOP_MARKERS, KM_TILE_LEGEND, KM_WORLD, KM_ISLANDS, KM_CONNECTIONS, getIslandStops };
 }

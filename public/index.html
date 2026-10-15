@@ -576,7 +576,17 @@
   .km-zoom-host{position:absolute;inset:0;overflow:hidden;}
   .km-world{position:absolute;top:0;left:0;transform-origin:0 0;}
 
-  .km-connections-svg{position:absolute;top:0;left:0;pointer-events:none;overflow:visible;}
+  /* Explicit z-index on every world layer, bottom to top: water, islands,
+     bridges/gate, clouds, stops/badges — each bobbing island wrap creates
+     its own stacking context (non-"none" transform), so DOM order alone
+     can't be trusted to keep these layers apart; z-index pins it. */
+  .km-world-water{position:absolute;top:0;left:0;display:block;image-rendering:pixelated;image-rendering:crisp-edges;z-index:0;}
+  .km-island-wrap{position:absolute;}
+  .km-island-terrain{z-index:1;}
+  .km-connections-svg{position:absolute;top:0;left:0;pointer-events:none;overflow:visible;z-index:2;}
+  .km-ambient-cloud{z-index:3;}
+  .km-island-overlay{z-index:4;}
+
   .km-bridge-line{stroke:#7a5a34;stroke-width:5;stroke-linecap:round;}
   .km-ferry-line{stroke:var(--text-muted);stroke-width:2;stroke-dasharray:3 5;opacity:0.8;}
   .km-ferry-dock{fill:#7a5a34;stroke:var(--border);stroke-width:1.5;}
@@ -587,7 +597,6 @@
   .km-gate-socket{fill:var(--bg-panel-alt);stroke:var(--border);stroke-width:2;}
   .km-gate-socket.lit{fill:var(--accent);stroke:var(--accent);}
 
-  .km-island-wrap{position:absolute;}
   .km-island-canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
   .km-island-banner{
     position:absolute;top:-34px;left:50%;transform:translateX(-50%);
@@ -621,9 +630,18 @@
   .km-stop-locked{background:var(--bg-panel-alt);color:var(--text-muted);opacity:0.75;}
   .km-stop:focus-visible{outline:3px solid var(--accent);outline-offset:2px;}
 
+  .km-stop-label{
+    display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    margin-top:4px;font-family:var(--font-body);font-size:9px;white-space:nowrap;
+    background:var(--bg-panel);color:var(--text);border:1px solid var(--border);
+    padding:1px 5px;pointer-events:none;
+  }
+  .km-world.km-labels-visible .km-stop-label{display:block;}
+  .km-stop-active .km-stop-label{display:block;}
+
   @keyframes km-pulse{0%,100%{box-shadow:var(--shadow-xs);}50%{box-shadow:0 0 0 6px rgba(216,54,42,0.35);}}
   @keyframes km-bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
-  @keyframes km-drift{from{transform:translateX(0);}to{transform:translateX(1340px);}}
+  @keyframes km-drift{from{transform:translateX(0);}to{transform:translateX(2400px);}}
 
   /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
      squeezed the Math node until overflow-wrap broke subject names

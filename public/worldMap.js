@@ -12,6 +12,7 @@
 
   const DISPLAY_SCALE = 2; // each 16px tile renders at 32 CSS px on screen
   const OUTLINE = '#141414'; // pixel-art outlines stay near-black in both themes
+  const ZOOM_LABEL_THRESHOLD = 1.1; // show per-stop title labels once zoomed in at least this far
 
   // Same pixel sprite used for Nova's mark elsewhere in the app (chat
   // header, auth screen) — reused here as the player marker on the
@@ -93,6 +94,16 @@
   // drawing happens at native 16px resolution; CSS scales the canvas up.
   // ---------------------------------------------------------------------
   const S = KM_TILE_SIZE; // 16
+
+  // Every world-space pixel value (island offsets, tile positions, the
+  // world container itself) is authored in native 16px-tile units in
+  // mapData.js, then uniformly multiplied by DISPLAY_SCALE here — the
+  // same single multiplication the terrain canvases use to size their
+  // CSS display size — so terrain, bridges, the gate, and stops can
+  // never drift apart onto different scales.
+  function toPx(nativeValue) { return nativeValue * DISPLAY_SCALE; }
+  const WORLD_PX_W = toPx(KM_WORLD.width);
+  const WORLD_PX_H = toPx(KM_WORLD.height);
 
   function rect(ctx, x, y, w, h, color) {
     ctx.fillStyle = color;
@@ -244,14 +255,29 @@
     }
   }
 
+  // Open water filling the ENTIRE world rectangle (not just the gaps
+  // between islands) so panning/zooming never reveals a flat, un-tiled
+  // edge — the islands simply sit on top of it.
+  function renderWorldWaterCanvas(canvas, theme, shimmerFrame) {
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const cols = Math.ceil(KM_WORLD.width / S);
+    const rows = Math.ceil(KM_WORLD.height / S);
+    canvas.width = cols * S;
+    canvas.height = rows * S;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) drawWater(ctx, c * S, r * S, r, c, theme, shimmerFrame);
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Bridges, ferry, and the central Calculus Gate — all original, drawn
   // procedurally, positioned in world (16px-tile) coordinate space.
   // ---------------------------------------------------------------------
   function tileCenterWorld(island, tile) {
     return {
-      x: island.worldX + tile.col * S + S / 2,
-      y: island.worldY + tile.row * S + S / 2
+      x: toPx(island.worldX + tile.col * S + S / 2),
+      y: toPx(island.worldY + tile.row * S + S / 2)
     };
   }
 
@@ -279,7 +305,7 @@
   function renderGate(svg) {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'km-gate');
-    g.setAttribute('transform', `translate(${KM_WORLD.gateX},${KM_WORLD.gateY})`);
+    g.setAttribute('transform', `translate(${toPx(KM_WORLD.gateX)},${toPx(KM_WORLD.gateY)}) scale(${DISPLAY_SCALE})`);
 
     const whirl = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     whirl.setAttribute('class', 'km-gate-whirlpool');
@@ -334,17 +360,19 @@
   // Decorative drifting clouds (ambient, not tied to any island/state).
   // ---------------------------------------------------------------------
   function renderAmbientClouds(container, reduceMotion) {
+    // Positions are authored as fractions of the world rectangle so they
+    // stay proportionally placed regardless of DISPLAY_SCALE.
     const positions = [
-      { top: 40, startLeft: -80, duration: 42 },
-      { top: 140, startLeft: -200, duration: 55 },
-      { top: 620, startLeft: -140, duration: 48 },
-      { top: 720, startLeft: -260, duration: 60 }
+      { top: 0.047, startLeft: -0.040, duration: 42 },
+      { top: 0.163, startLeft: -0.101, duration: 55 },
+      { top: 0.721, startLeft: -0.071, duration: 48 },
+      { top: 0.837, startLeft: -0.132, duration: 60 }
     ];
     positions.forEach((p, i) => {
       const cloud = document.createElement('div');
       cloud.className = 'km-ambient-cloud';
-      cloud.style.top = p.top + 'px';
-      cloud.style.left = p.startLeft + 'px';
+      cloud.style.top = (p.top * WORLD_PX_H) + 'px';
+      cloud.style.left = (p.startLeft * WORLD_PX_W) + 'px';
       if (!reduceMotion) {
         cloud.style.animation = `km-drift ${p.duration}s linear ${i * -7}s infinite`;
       }
@@ -360,19 +388,20 @@
   function renderStops(islandWrap, islandId, islandData, apiSubject, data) {
     const isCurrentSubject = apiSubject.id === data.subject_level;
     const topics = apiSubject.topics || [];
-    islandData.stops.forEach((tile, i) => {
+    const stops = getIslandStops(islandData);
+    stops.forEach((tile, i) => {
       const topic = topics[i];
       if (!topic) return;
       let state = 'locked';
       if (isCurrentSubject && i < data.current_topic_index) state = 'completed';
       else if (isCurrentSubject && i === data.current_topic_index) state = 'active';
-      const isBoss = i === islandData.stops.length - 1;
+      const isBoss = i === stops.length - 1;
 
       const stop = document.createElement('button');
       stop.type = 'button';
       stop.className = 'km-stop km-stop-' + state + (isBoss ? ' km-stop-boss' : '');
-      stop.style.left = (tile.col * S + S / 2) + 'px';
-      stop.style.top = (tile.row * S + S / 2) + 'px';
+      stop.style.left = toPx(tile.col * S + S / 2) + 'px';
+      stop.style.top = toPx(tile.row * S + S / 2) + 'px';
       stop.dataset.subject = islandId;
       stop.dataset.seq = String(i);
       stop.dataset.topicId = topic.id;
@@ -387,6 +416,11 @@
         icon.textContent = state === 'completed' ? '⚑' : state === 'locked' ? '\u{1F512}' : (topic.symbol || '•');
       }
       stop.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'km-stop-label';
+      label.textContent = topic.title;
+      stop.appendChild(label);
 
       islandWrap.appendChild(stop);
     });
@@ -421,98 +455,142 @@
 
     const world = document.createElement('div');
     world.className = 'km-world';
-    world.style.width = KM_WORLD.width + 'px';
-    world.style.height = KM_WORLD.height + 'px';
+    world.style.width = WORLD_PX_W + 'px';
+    world.style.height = WORLD_PX_H + 'px';
     zoomHost.appendChild(world);
-
-    renderAmbientClouds(world, reduceMotion);
-
-    // SVG layer for bridges/ferry/gate (sits under island DOM wrappers so
-    // islands visually overlap their anchor ends).
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('class', 'km-connections-svg');
-    svg.setAttribute('width', KM_WORLD.width);
-    svg.setAttribute('height', KM_WORLD.height);
-    world.appendChild(svg);
-
-    KM_CONNECTIONS.forEach(conn => renderConnection(svg, conn, theme));
-    const gateEl = renderGate(svg);
 
     const subjectsById = {};
     (apiData.subjects || []).forEach(s => { subjectsById[s.id] = s; });
-    const bossLit = {};
-    Object.keys(KM_ISLANDS).forEach(id => {
-      const subj = subjectsById[id];
-      const island = KM_ISLANDS[id];
-      const isCurrentSubject = subj && subj.id === apiData.subject_level;
-      bossLit[id] = !!(isCurrentSubject && apiData.current_topic_index >= island.stops.length - 1 && subj.topics && subj.topics.length);
-    });
-    litSockets(gateEl, bossLit);
 
-    // Per-island wrapper: positioned at world offset, own bob animation,
-    // holds that island's canvas + its 12 DOM stops + a banner/badge.
+    // Layer order (bottom to top): water, islands, bridges/gate, clouds,
+    // stops/badges. Each layer is a separate pass over the islands so the
+    // DOM append order controls stacking directly, rather than relying on
+    // z-index to fight the stacking contexts each bobbing wrap creates.
+
+    // 1. Open water — fills the entire world rectangle, not just the gaps
+    // between islands, so panning/zooming never reveals a flat edge.
+    const waterCanvas = document.createElement('canvas');
+    waterCanvas.className = 'km-world-water';
+    waterCanvas.style.width = WORLD_PX_W + 'px';
+    waterCanvas.style.height = WORLD_PX_H + 'px';
+    renderWorldWaterCanvas(waterCanvas, theme, 0);
+    world.appendChild(waterCanvas);
+
+    // 2. Island terrain canvases only (banners/stops render in pass 5).
     const islandCanvases = {};
+    const islandMeta = [];
     Object.keys(KM_ISLANDS).forEach((id, idx) => {
       const islandData = KM_ISLANDS[id];
-      const subj = subjectsById[id];
+      const stopCount = getIslandStops(islandData).length;
+      islandMeta.push({ id, idx, islandData, stopCount });
 
       const wrap = document.createElement('div');
-      wrap.className = 'km-island-wrap';
-      wrap.style.left = islandData.worldX + 'px';
-      wrap.style.top = islandData.worldY + 'px';
-      wrap.style.width = (islandData.grid[0].length * S) + 'px';
-      wrap.style.height = (islandData.grid.length * S) + 'px';
+      wrap.className = 'km-island-wrap km-island-terrain';
+      wrap.style.left = toPx(islandData.worldX) + 'px';
+      wrap.style.top = toPx(islandData.worldY) + 'px';
+      wrap.style.width = toPx(islandData.grid[0].length * S) + 'px';
+      wrap.style.height = toPx(islandData.grid.length * S) + 'px';
       if (!reduceMotion) {
         wrap.style.animation = `km-bob 2.6s steps(6) ${idx * -0.6}s infinite`;
       }
 
       const canvas = document.createElement('canvas');
       canvas.className = 'km-island-canvas';
-      canvas.style.width = (islandData.grid[0].length * S * DISPLAY_SCALE) + 'px';
-      canvas.style.height = (islandData.grid.length * S * DISPLAY_SCALE) + 'px';
+      canvas.style.width = toPx(islandData.grid[0].length * S) + 'px';
+      canvas.style.height = toPx(islandData.grid.length * S) + 'px';
       renderIslandCanvas(canvas, islandData, theme, 0);
       wrap.appendChild(canvas);
       islandCanvases[id] = canvas;
 
-      const completeCount = subj && subj.id === apiData.subject_level ? Math.min(apiData.current_topic_index, 12) : 0;
-      const banner = document.createElement('div');
-      banner.className = 'km-island-banner';
-      banner.innerHTML = `<span class="km-island-banner-label">${subj ? subj.label : islandData.label}</span>` +
-        `<span class="km-island-banner-badge">${completeCount} / 12 complete</span>`;
-      wrap.appendChild(banner);
-
-      if (subj) renderStops(wrap, id, islandData, subj, apiData);
-
       world.appendChild(wrap);
     });
 
-    // Water shimmer: redraw each island canvas on a slow stepped interval,
-    // alternating between 2 shimmer frames. Skipped under reduced motion.
+    // 3. Bridges, ferry, and the central gate — above the islands.
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'km-connections-svg');
+    svg.setAttribute('width', WORLD_PX_W);
+    svg.setAttribute('height', WORLD_PX_H);
+    world.appendChild(svg);
+
+    KM_CONNECTIONS.forEach(conn => renderConnection(svg, conn, theme));
+    const gateEl = renderGate(svg);
+
+    const bossLit = {};
+    islandMeta.forEach(({ id, islandData, stopCount }) => {
+      const subj = subjectsById[id];
+      const isCurrentSubject = subj && subj.id === apiData.subject_level;
+      bossLit[id] = !!(isCurrentSubject && apiData.current_topic_index >= stopCount - 1 && subj.topics && subj.topics.length);
+    });
+    litSockets(gateEl, bossLit);
+
+    // 4. Ambient drifting clouds — above bridges, below stops/badges.
+    renderAmbientClouds(world, reduceMotion);
+
+    // 5. Per-island overlay (banner + stops) — topmost layer. Positioned
+    // and animated identically to that island's terrain wrap (same
+    // offset, same bob timing) so it still bobs together with its
+    // island despite being a separate DOM subtree.
+    islandMeta.forEach(({ id, idx, islandData, stopCount }) => {
+      const subj = subjectsById[id];
+
+      const overlay = document.createElement('div');
+      overlay.className = 'km-island-wrap km-island-overlay';
+      overlay.style.left = toPx(islandData.worldX) + 'px';
+      overlay.style.top = toPx(islandData.worldY) + 'px';
+      overlay.style.width = toPx(islandData.grid[0].length * S) + 'px';
+      overlay.style.height = toPx(islandData.grid.length * S) + 'px';
+      if (!reduceMotion) {
+        overlay.style.animation = `km-bob 2.6s steps(6) ${idx * -0.6}s infinite`;
+      }
+
+      const completeCount = subj && subj.id === apiData.subject_level ? Math.min(apiData.current_topic_index, stopCount) : 0;
+      const banner = document.createElement('div');
+      banner.className = 'km-island-banner';
+      banner.innerHTML = `<span class="km-island-banner-label">${subj ? subj.label : islandData.label}</span>` +
+        `<span class="km-island-banner-badge">${completeCount} / ${stopCount} complete</span>`;
+      overlay.appendChild(banner);
+
+      if (subj) renderStops(overlay, id, islandData, subj, apiData);
+
+      world.appendChild(overlay);
+    });
+
+    // Water shimmer: redraw the ocean + each island canvas on a slow
+    // stepped interval, alternating between 2 shimmer frames. Skipped
+    // under reduced motion.
     if (!reduceMotion) {
       let frame = 0;
       state.shimmerInterval = setInterval(() => {
         frame = frame === 0 ? 1 : 0;
+        renderWorldWaterCanvas(waterCanvas, theme, frame);
         Object.keys(KM_ISLANDS).forEach(id => {
           renderIslandCanvas(islandCanvases[id], KM_ISLANDS[id], theme, frame);
         });
       }, 650);
     }
 
-    // Pan + zoom on the whole world via d3-zoom.
+    // Pan + zoom on the whole world via d3-zoom. Minimum zoom is whatever
+    // scale makes the world fully cover the viewport in both dimensions
+    // (so zooming out never reveals empty space past the world's edge);
+    // panning is clamped to the world's own bounds for the same reason.
+    const maxZoom = 3;
+    const minZoom = Math.min(maxZoom, Math.max(viewportW / WORLD_PX_W, viewportH / WORLD_PX_H));
     const d3Selection = d3.select(zoomHost);
     const zoomBehavior = d3.zoom()
-      .scaleExtent([0.35, 2.5])
+      .scaleExtent([minZoom, maxZoom])
+      .extent([[0, 0], [viewportW, viewportH]])
+      .translateExtent([[0, 0], [WORLD_PX_W, WORLD_PX_H]])
       .on('zoom', event => {
         world.style.transform = `translate(${event.transform.x}px,${event.transform.y}px) scale(${event.transform.k})`;
+        world.classList.toggle('km-labels-visible', event.transform.k >= ZOOM_LABEL_THRESHOLD);
       });
     d3Selection.call(zoomBehavior);
 
-    const fitScale = Math.min(1.2, Math.max(0.35, Math.min(viewportW / KM_WORLD.width, viewportH / KM_WORLD.height) * 0.92));
     const resetTransform = d3.zoomIdentity
       .translate(viewportW / 2, viewportH / 2)
-      .scale(fitScale)
-      .translate(-KM_WORLD.width / 2, -KM_WORLD.height / 2);
+      .scale(minZoom)
+      .translate(-WORLD_PX_W / 2, -WORLD_PX_H / 2);
     d3Selection.call(zoomBehavior.transform, resetTransform);
 
     state.zoomBehavior = zoomBehavior;
