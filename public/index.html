@@ -372,13 +372,40 @@
   }
   .chat-title{font-family:var(--font-display);font-weight:400;font-size:12px;margin:0;}
   .chat-sub{font-family:var(--font-body);font-size:13px;color:var(--text-muted);margin:3px 0 0;}
+  .chat-header-actions{margin-left:auto;display:flex;align-items:center;gap:8px;}
   .reset-btn{
-    margin-left:auto;background:var(--bg-panel);color:var(--text);
+    background:var(--bg-panel);color:var(--text);
     border:2px solid var(--border);padding:7px 12px;font-family:var(--font-display);font-size:9px;cursor:pointer;
     box-shadow:var(--shadow-xs);
   }
   .reset-btn:hover{background:var(--bg-panel-alt);}
   .reset-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+
+  /* Graph panel (Desmos) */
+  .graph-notice{
+    margin:0;padding:8px 16px;font-family:var(--font-body);font-size:12px;
+    color:var(--text-muted);background:var(--bg-panel-alt);border-bottom:2px solid var(--border);
+  }
+  .graph-notice[hidden]{display:none;}
+  .chat-graph-tabs{display:flex;border-bottom:2px solid var(--border);}
+  .chat-graph-tabs[hidden]{display:none;}
+  .cg-tab{
+    flex:1;background:var(--bg-panel);color:var(--text-muted);
+    border:none;border-right:2px solid var(--border);padding:8px;
+    font-family:var(--font-display);font-size:9px;cursor:pointer;
+  }
+  .cg-tab:last-child{border-right:none;}
+  .cg-tab.active{background:var(--bg-panel-alt);color:var(--text);}
+  .chat-graph-split{display:flex;flex:1;min-height:0;overflow:hidden;}
+  .chat-column{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden;}
+  .chat-column[hidden]{display:none;}
+  .graph-column{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;border-left:3px solid var(--border);}
+  .graph-column[hidden]{display:none;}
+  .graph-calculator{flex:1;min-height:0;}
+  /* Which of chat-column/graph-column is visible at any time (side by
+     side above 1100px, one-at-a-time via the tabs below it) is decided in
+     JS — see updateChatGraphLayout() — by setting the [hidden] attribute
+     directly, so this file has no layout media query to keep in sync. */
 
   .conv-tabs{
     display:flex;gap:6px;overflow-x:auto;
@@ -998,24 +1025,39 @@
             <p class="chat-title" id="chatTitle">Nova</p>
             <p class="chat-sub">Live AI tutor</p>
           </div>
-          <button class="reset-btn" id="resetBtn" type="button">New topic</button>
-        </div>
-        <div class="conv-tabs" id="conversationTabs" aria-label="Past conversations"></div>
-        <div class="messages" id="messages"></div>
-        <div class="quiz-panel" id="quizPanel" hidden>
-          <div class="ob-progress-header">
-            <span class="ob-step" id="quizStep">Question 1 of 10</span>
-            <div class="ob-bar"><div class="ob-bar-fill" id="quizBarFill" style="width:0%"></div></div>
+          <div class="chat-header-actions">
+            <button class="icon-toggle" id="graphToggleBtn" type="button" aria-label="Open graphing calculator" title="Graph">📈</button>
+            <button class="reset-btn" id="resetBtn" type="button">New topic</button>
           </div>
-          <p class="ob-level-label" id="quizChapterLabel">Chapter Quiz</p>
-          <p class="ob-question" id="quizQuestion"></p>
-          <div class="ob-options" id="quizOptions"></div>
-          <button class="ob-continue hidden" id="quizContinue" type="button">Continue →</button>
         </div>
-        <form class="composer" id="composer">
-          <textarea id="input" rows="1" placeholder="Ask Nova a question..." autocomplete="off"></textarea>
-          <button type="submit" aria-label="Send">➔</button>
-        </form>
+        <p class="graph-notice" id="graphNotice" hidden></p>
+        <div class="chat-graph-tabs" id="chatGraphTabs" hidden>
+          <button class="cg-tab active" id="chatTabBtn" type="button">Chat</button>
+          <button class="cg-tab" id="graphTabBtn" type="button">Graph</button>
+        </div>
+        <div class="chat-graph-split" id="chatGraphSplit">
+          <div class="chat-column" id="chatColumn">
+            <div class="conv-tabs" id="conversationTabs" aria-label="Past conversations"></div>
+            <div class="messages" id="messages"></div>
+            <div class="quiz-panel" id="quizPanel" hidden>
+              <div class="ob-progress-header">
+                <span class="ob-step" id="quizStep">Question 1 of 10</span>
+                <div class="ob-bar"><div class="ob-bar-fill" id="quizBarFill" style="width:0%"></div></div>
+              </div>
+              <p class="ob-level-label" id="quizChapterLabel">Chapter Quiz</p>
+              <p class="ob-question" id="quizQuestion"></p>
+              <div class="ob-options" id="quizOptions"></div>
+              <button class="ob-continue hidden" id="quizContinue" type="button">Continue →</button>
+            </div>
+            <form class="composer" id="composer">
+              <textarea id="input" rows="1" placeholder="Ask Nova a question..." autocomplete="off"></textarea>
+              <button type="submit" aria-label="Send">➔</button>
+            </form>
+          </div>
+          <div class="graph-column" id="graphColumn" hidden>
+            <div class="graph-calculator" id="graphCalculator"></div>
+          </div>
+        </div>
       </main>
 
       <!-- Progress panel -->
@@ -1174,6 +1216,15 @@ const quizOptionsEl   = document.getElementById('quizOptions');
 const quizContinueBtn = document.getElementById('quizContinue');
 sendBtn.addEventListener('click', playClickBlip);
 const resetBtn       = document.getElementById('resetBtn');
+const graphToggleBtn = document.getElementById('graphToggleBtn');
+const graphNotice    = document.getElementById('graphNotice');
+const chatGraphTabs  = document.getElementById('chatGraphTabs');
+const chatTabBtn     = document.getElementById('chatTabBtn');
+const graphTabBtn    = document.getElementById('graphTabBtn');
+const chatGraphSplit = document.getElementById('chatGraphSplit');
+const chatColumn     = document.getElementById('chatColumn');
+const graphColumn    = document.getElementById('graphColumn');
+const graphCalculatorEl = document.getElementById('graphCalculator');
 const xpFill         = document.getElementById('xpFill');
 const xpCaption      = document.getElementById('xpCaption');
 const levelReadout   = document.getElementById('levelReadout');
@@ -1217,6 +1268,18 @@ let currentTopicIndex = 0;
 let currentTopicObj = null;
 let conversations = [];
 let activeConversationId = null;
+
+// ── Graph panel (Desmos) state ─────────────────────────────────────
+// 'unloaded' -> first click triggers the fetch+script-load sequence;
+// 'loading' -> that sequence is in flight (button clicks are ignored);
+// 'ready' -> calculator exists, toggling is just a visibility flip;
+// 'failed' -> config fetch or script load failed once — button is
+// hidden and never retried this session.
+let desmosState = 'unloaded';
+let desmosCalculator = null;
+let graphPanelOpen = false;
+let chatGraphActiveTab = 'chat'; // narrow-screen tab switch only
+const CHAT_GRAPH_WIDE_QUERY = '(min-width: 1100px)';
 
 // ── Quiz mode state ────────────────────────────────────────────────
 let quizActive = false;
@@ -1314,6 +1377,11 @@ themeToggle.addEventListener('click', () => {
   // immediately if the map is currently open so it doesn't go stale.
   if (!knowledgeMapOverlay.classList.contains('hidden') && knowledgeMapData) {
     window.KnowledgeMapWorld.render(knowledgeMapBody, knowledgeMapData, getCurrentTheme());
+  }
+  // Same idea for the Desmos calculator, if it's been loaded — just
+  // consumes the current theme, doesn't touch the toggle itself.
+  if (desmosCalculator) {
+    desmosCalculator.updateSettings({ invertedColors: getCurrentTheme() === 'dark' });
   }
 });
 updateThemeToggleUI();
@@ -2431,6 +2499,7 @@ async function sendAutoTrigger(trigger) {
       conversation.push({ role: 'assistant', content: finalText });
       renderMessage('assistant', finalText);
       renderVideoCard(data.resource);
+      applyNovaGraph(data.graph);
       playReplyTone();
       flashTabTitle();
     }
@@ -2468,7 +2537,12 @@ async function sendMessage(text) {
     const res = await fetch('/api/tutor', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: 'math', messages: conversation, conversation_id: activeConversationId })
+      body: JSON.stringify({
+        subject: 'math',
+        messages: conversation,
+        conversation_id: activeConversationId,
+        graph_state: collectStudentGraphState()
+      })
     });
     const data = await res.json();
     hideTyping();
@@ -2485,6 +2559,7 @@ async function sendMessage(text) {
     conversation.push({ role: 'assistant', content: finalText });
     renderMessage('assistant', finalText);
     renderVideoCard(data.resource);
+    applyNovaGraph(data.graph);
     playReplyTone();
     flashTabTitle();
 
@@ -2591,6 +2666,172 @@ knowledgeMapBox.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKnowledgeMap(); }
 });
 knowledgeMapClose.addEventListener('click', closeKnowledgeMap);
+
+// ── Graph panel (embedded Desmos calculator) ────────────────────────
+// Loaded lazily: the script tag is only injected the first time the
+// Graph button is clicked (never on page load, never before login —
+// the button only exists inside the logged-in app shell). A failure at
+// any step (config fetch, script load, construction) hides the button
+// for the rest of the session and shows a small inline notice; the chat
+// itself is never affected either way.
+function showGraphNotice(message) {
+  graphNotice.textContent = message;
+  graphNotice.hidden = false;
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('The Desmos script failed to load.'));
+    document.head.appendChild(script);
+  });
+}
+
+// Fetches the config, loads the script, and constructs the calculator —
+// only runs once (desmosState guards re-entry); returns true on success.
+async function ensureCalculatorReady() {
+  if (desmosState === 'ready') return true;
+  if (desmosState === 'failed') return false;
+  if (desmosState === 'loading') return false; // a click came in mid-load; ignore it
+
+  desmosState = 'loading';
+  try {
+    const res = await fetch('/api/graph-config');
+    if (!res.ok) throw new Error('not available');
+    const config = await res.json();
+    if (!config.available || !config.scriptUrl) throw new Error('not available');
+
+    await loadScriptOnce(config.scriptUrl);
+    if (!window.Desmos || !window.Desmos.GraphingCalculator) {
+      throw new Error('Desmos script loaded but the API was not found.');
+    }
+
+    desmosCalculator = window.Desmos.GraphingCalculator(graphCalculatorEl, {
+      invertedColors: getCurrentTheme() === 'dark',
+      expressions: true,
+      keypad: true
+    });
+    desmosState = 'ready';
+    return true;
+  } catch (err) {
+    console.error('Graph feature unavailable:', err);
+    desmosState = 'failed';
+    graphToggleBtn.hidden = true;
+    showGraphNotice("The graphing calculator isn't available right now.");
+    return false;
+  }
+}
+
+// Decides, for the current viewport, whether chat/graph show side by side
+// or one-at-a-time via the Chat|Graph tabs — pure DOM update, no network.
+function updateChatGraphLayout() {
+  if (!graphPanelOpen) {
+    chatGraphTabs.hidden = true;
+    chatColumn.hidden = false;
+    graphColumn.hidden = true;
+    return;
+  }
+
+  const isWide = window.matchMedia(CHAT_GRAPH_WIDE_QUERY).matches;
+  if (isWide) {
+    chatGraphTabs.hidden = true;
+    chatColumn.hidden = false;
+    graphColumn.hidden = false;
+  } else {
+    chatGraphTabs.hidden = false;
+    chatColumn.hidden = chatGraphActiveTab !== 'chat';
+    graphColumn.hidden = chatGraphActiveTab !== 'graph';
+  }
+  chatTabBtn.classList.toggle('active', isWide || chatGraphActiveTab === 'chat');
+  graphTabBtn.classList.toggle('active', isWide || chatGraphActiveTab === 'graph');
+
+  if (desmosCalculator && !graphColumn.hidden) {
+    // Container may have just become visible/resized — Desmos needs an
+    // explicit nudge rather than relying on autosize alone here.
+    requestAnimationFrame(() => desmosCalculator.resize());
+  }
+}
+
+async function toggleGraphPanel() {
+  if (desmosState === 'loading') return;
+  if (!graphPanelOpen) {
+    const ready = desmosState === 'ready' || await ensureCalculatorReady();
+    if (!ready) return;
+    graphPanelOpen = true;
+  } else {
+    graphPanelOpen = false;
+  }
+  updateChatGraphLayout();
+}
+
+graphToggleBtn.addEventListener('click', toggleGraphPanel);
+chatTabBtn.addEventListener('click', () => { chatGraphActiveTab = 'chat'; updateChatGraphLayout(); });
+graphTabBtn.addEventListener('click', () => { chatGraphActiveTab = 'graph'; updateChatGraphLayout(); });
+window.addEventListener('resize', () => {
+  if (graphPanelOpen) updateChatGraphLayout();
+});
+
+// Applies a validated `graph` object from a /api/tutor response (already
+// server-validated — this is still defensive, since a malformed Desmos
+// expression must never throw in our own code). Nova's own expressions
+// always use "nova-"-prefixed ids so a student's own typed expressions
+// are never touched; `replace` clears only those.
+let novaExpressionIds = [];
+async function applyNovaGraph(graph) {
+  if (!graph || !Array.isArray(graph.expressions) || !graph.expressions.length) return;
+
+  if (!graphPanelOpen) {
+    const ready = desmosState === 'ready' || await ensureCalculatorReady();
+    if (!ready) return;
+    graphPanelOpen = true;
+    updateChatGraphLayout();
+  }
+  if (!desmosCalculator) return;
+
+  try {
+    if (graph.replace) {
+      novaExpressionIds.forEach(id => desmosCalculator.removeExpression({ id }));
+      novaExpressionIds = [];
+    }
+    graph.expressions.forEach((expr, i) => {
+      if (!expr || typeof expr.latex !== 'string') return;
+      const id = 'nova-' + i;
+      const payload = { id, latex: expr.latex };
+      if (expr.color && window.Desmos.Colors && window.Desmos.Colors[expr.color]) {
+        payload.color = window.Desmos.Colors[expr.color];
+      }
+      desmosCalculator.setExpression(payload);
+      if (!novaExpressionIds.includes(id)) novaExpressionIds.push(id);
+    });
+    if (graph.bounds) {
+      const { xmin, xmax, ymin, ymax } = graph.bounds;
+      desmosCalculator.setMathBounds({ left: xmin, right: xmax, bottom: ymin, top: ymax });
+    }
+  } catch (err) {
+    // An expression Desmos can't parse should never throw in our code —
+    // it just won't render on the calculator's own expression list.
+    console.error('Failed to apply graph from Nova:', err);
+  }
+}
+
+// Collects a compact summary of what the student has typed into their
+// OWN expressions (never Nova's "nova-"-prefixed ones) — sent with a real
+// message only, and only while the panel is open, per the backend's
+// buildGraphStateNote().
+function collectStudentGraphState() {
+  if (!graphPanelOpen || !desmosCalculator) return undefined;
+  try {
+    return desmosCalculator.getExpressions()
+      .filter(e => e.type === 'expression' && typeof e.latex === 'string' && !e.id.startsWith('nova-'))
+      .slice(0, 8)
+      .map(e => e.latex.slice(0, 150));
+  } catch (err) {
+    console.error('Failed to read student graph state:', err);
+    return undefined;
+  }
+}
 </script>
 
 </body>
