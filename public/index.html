@@ -212,9 +212,17 @@
   }
 
   /* ── Main app ───────────────────────────────────────────────────── */
-  .app{max-width:1400px;margin:0 auto;padding:22px 24px 40px;}
+  /* Fluid width (fills wide displays instead of stopping at a fixed
+     1400px) and full viewport height — .app is a column flexbox so the
+     header/nav keep their natural height and .view below takes the rest.
+     dvh (rather than vh) accounts for mobile browser chrome. */
+  .app{
+    width:min(96vw, 2000px);margin:0 auto;
+    padding:clamp(14px,1.6vw,22px) clamp(16px,2vw,24px);
+    height:100dvh;display:flex;flex-direction:column;box-sizing:border-box;
+  }
 
-  .app-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .app-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-shrink:0;}
   .nova-mark{
     width:38px;height:38px;padding:6px;
     background:var(--accent);border:3px solid var(--border);box-shadow:var(--shadow-xs);
@@ -254,6 +262,7 @@
     margin:0 0 18px;padding:5px;
     background:var(--bg-panel);border:3px solid var(--border);
     width:max-content;max-width:100%;
+    flex-shrink:0;
   }
   .nav-btn{
     display:flex;align-items:center;gap:7px;
@@ -269,19 +278,28 @@
     background:rgba(0,0,0,0.12);font-family:var(--font-display);font-size:9px;
   }
   .nav-btn.active .nav-count{background:rgba(248,248,248,0.35);}
+  /* Below .app-header/.page-nav, the active view takes all remaining
+     height. #questView arranges its own .panels to fill it with no page
+     scroll (only the message list and side panels scroll internally —
+     see .panel below); the Wishlist view scrolls itself instead, since
+     its content is a single long page rather than equal-height panels. */
+  .view{flex:1;min-height:0;}
   .view[hidden]{display:none;}
+  #questView{display:flex;flex-direction:column;overflow:hidden;}
 
   .panels{
     display:grid;
     grid-template-columns:300px 1fr 300px;
-    gap:22px;
-    align-items:start;
+    gap:clamp(14px,1.6vw,22px);
+    align-items:stretch;
+    flex:1;min-height:0;
   }
   .panel{
     background:var(--bg-panel);
     border:3px solid var(--border);
     box-shadow:var(--shadow);
-    padding:22px;
+    padding:clamp(16px,1.8vw,22px);
+    min-width:0;min-height:0;overflow-y:auto;
   }
   .panel-title{
     font-family:var(--font-display);font-weight:400;font-size:11px;
@@ -360,7 +378,7 @@
   .lesson-map-empty{font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin-top:8px;}
 
   /* Chat panel */
-  .chat-panel{display:flex;flex-direction:column;height:580px;padding:0;overflow:hidden;}
+  .chat-panel{display:flex;flex-direction:column;height:100%;min-width:0;min-height:0;padding:0;overflow:hidden;}
   .chat-header{
     display:flex;align-items:center;gap:10px;
     padding:14px 16px;border-bottom:3px solid var(--accent);
@@ -406,6 +424,49 @@
      side above 1100px, one-at-a-time via the tabs below it) is decided in
      JS — see updateChatGraphLayout() — by setting the [hidden] attribute
      directly, so this file has no layout media query to keep in sync. */
+
+  /* Graph focus mode: while the Graph panel is open at 1100px+, the
+     .panels grid gets a "graph-focus" class (from updateChatGraphLayout)
+     that shrinks the Math track / Progress columns to slim icon rails
+     and hands their freed width to chat+graph (40/60 split, chat never
+     below 420px — see .chat-column/.graph-column overrides below).
+     Each rail has its own expand button; "left-expanded"/"right-expanded"
+     on .panels temporarily restores that one panel's full width/content. */
+  .rail{display:none;flex-direction:column;align-items:center;gap:10px;height:100%;padding-top:2px;}
+  .rail-icon{font-size:18px;}
+  .rail-level, .rail-xp{
+    writing-mode:vertical-rl;text-orientation:mixed;
+    font-family:var(--font-display);font-size:9px;white-space:nowrap;
+  }
+  .rail-level{color:var(--text);}
+  .rail-xp{color:var(--text-muted);font-family:var(--font-body);font-size:10px;}
+  .rail-expand{
+    margin-top:auto;background:var(--bg-panel-alt);color:var(--text);
+    border:2px solid var(--border);width:26px;height:26px;font-size:11px;cursor:pointer;
+  }
+  .rail-expand:hover{background:var(--bg-panel);}
+
+  .panels.graph-focus{grid-template-columns:60px 1fr 60px;}
+  .panels.graph-focus.left-expanded{grid-template-columns:280px 1fr 60px;}
+  .panels.graph-focus.right-expanded{grid-template-columns:60px 1fr 280px;}
+  .panels.graph-focus.left-expanded.right-expanded{grid-template-columns:280px 1fr 280px;}
+  .panels.graph-focus .panel-track,
+  .panels.graph-focus .panel-progress{padding:10px 4px;}
+  .panels.graph-focus.left-expanded .panel-track,
+  .panels.graph-focus.right-expanded .panel-progress{padding:clamp(16px,1.8vw,22px);}
+  .panels.graph-focus .panel-track .rail,
+  .panels.graph-focus .panel-progress .rail{display:flex;}
+  .panels.graph-focus .panel-track .panel-full,
+  .panels.graph-focus .panel-progress .panel-full{display:none;}
+  .panels.graph-focus.left-expanded .panel-track .rail{display:none;}
+  .panels.graph-focus.left-expanded .panel-track .panel-full{display:block;}
+  .panels.graph-focus.right-expanded .panel-progress .rail{display:none;}
+  .panels.graph-focus.right-expanded .panel-progress .panel-full{display:block;}
+
+  /* Chat gets ~40% of the chat-panel column, graph ~60%, while in focus
+     mode — outside focus mode these stay an even flex:1/flex:1 split. */
+  .panels.graph-focus .chat-column{flex:0 1 40%;min-width:420px;}
+  .panels.graph-focus .graph-column{flex:1 1 60%;}
 
   .conv-tabs{
     display:flex;gap:6px;overflow-x:auto;
@@ -716,7 +777,7 @@
   .memory-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
 
   /* Rewards */
-  .page-shell{max-width:980px;}
+  .page-shell{max-width:980px;width:100%;margin:0 auto;overflow-y:auto;}
   .page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:4px 0 24px;}
   .page-kicker{
     margin:0 0 8px;color:var(--accent);font-family:var(--font-display);
@@ -889,8 +950,17 @@
     .bubble.typing span{animation:none;}
     .confetti-piece{animation:none;opacity:0;}
   }
-  @media (max-width:1024px){
-    .panels{grid-template-columns:1fr;}
+  @media (max-width:1099px){
+    /* Below the graph-split breakpoint, restore today's ordinary
+       scrolling page instead of the full-height/internal-scroll layout
+       above — stacked panels read top to bottom with the page itself
+       scrolling, same as before this layout pass. */
+    .app{height:auto;}
+    .view{flex:none;min-height:0;}
+    #questView{display:block;overflow:visible;}
+    .panels{grid-template-columns:1fr;align-items:stretch;flex:none;}
+    .panel{overflow-y:visible;min-height:0;}
+    .chat-panel{height:580px;}
     .path{flex-direction:row;overflow-x:auto;padding-bottom:4px;}
     .node{min-width:150px;}
     .path-line{width:20px;height:3px;background:repeating-linear-gradient(90deg,var(--border) 0 4px,transparent 4px 8px);flex-shrink:0;}
@@ -1007,14 +1077,24 @@
   <section class="view" id="questView">
     <div class="panels">
 
-      <!-- Left panel: math track flowchart (rendered by JS) -->
-      <aside class="panel" aria-label="Math track">
-        <p class="panel-title">Math track</p>
-        <div class="path" id="questPath"></div>
-        <details class="lesson-map" id="lessonMap">
-          <summary class="lesson-map-summary">Lesson map</summary>
-          <div class="lesson-map-list" id="lessonMapList"></div>
-        </details>
+      <!-- Left panel: math track flowchart (rendered by JS). Collapses to
+           a slim rail when the Graph panel is open at 1100px+ (see
+           updateChatGraphLayout) to give that width to chat/graph. -->
+      <aside class="panel panel-track" aria-label="Math track">
+        <div class="rail" id="trackRail">
+          <span class="rail-icon" aria-hidden="true">📐</span>
+          <span class="rail-level" id="railLevelLeft">LV 0</span>
+          <span class="rail-xp" id="railXpLeft">0 XP</span>
+          <button class="rail-expand" id="trackExpandBtn" type="button" aria-label="Expand math track panel">▸</button>
+        </div>
+        <div class="panel-full">
+          <p class="panel-title">Math track</p>
+          <div class="path" id="questPath"></div>
+          <details class="lesson-map" id="lessonMap">
+            <summary class="lesson-map-summary">Lesson map</summary>
+            <div class="lesson-map-list" id="lessonMapList"></div>
+          </details>
+        </div>
       </aside>
 
       <!-- Chat panel -->
@@ -1060,52 +1140,62 @@
         </div>
       </main>
 
-      <!-- Progress panel -->
-      <aside class="panel" aria-label="Mastery and notes">
-        <p class="panel-title">Progress</p>
-        <div class="xp-card">
-          <div class="xp-card-top">
-            <span class="subject-dot math"></span>
-            <span>Math</span>
-            <span class="level-readout" id="levelReadout">LV 0</span>
+      <!-- Progress panel. Collapses to a slim rail when the Graph panel
+           is open at 1100px+ (see updateChatGraphLayout), same as the
+           Math track panel. -->
+      <aside class="panel panel-progress" aria-label="Mastery and notes">
+        <div class="rail" id="progressRail">
+          <span class="rail-icon" aria-hidden="true">✦</span>
+          <span class="rail-level" id="railLevelRight">LV 0</span>
+          <span class="rail-xp" id="railXpRight">0 XP</span>
+          <button class="rail-expand" id="progressExpandBtn" type="button" aria-label="Expand progress panel">◂</button>
+        </div>
+        <div class="panel-full">
+          <p class="panel-title">Progress</p>
+          <div class="xp-card">
+            <div class="xp-card-top">
+              <span class="subject-dot math"></span>
+              <span>Math</span>
+              <span class="level-readout" id="levelReadout">LV 0</span>
+            </div>
+            <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
+            <p class="xp-caption" id="xpCaption">0 / 200 XP</p>
           </div>
-          <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
-          <p class="xp-caption" id="xpCaption">0 / 200 XP</p>
-        </div>
-        <div class="mastery-card">
-          <p class="mastery-label">Mastery Score</p>
-          <p class="mastery-score"><span id="masteryScore">0</span><span class="mastery-denom"> / 100</span></p>
-          <p class="mastery-inputs" id="masteryInputs">Completion 0 · Progress 0 · Engagement 0 · Mastery 0</p>
-        </div>
-        <div class="knowledge-map" id="knowledgeMapBox" role="button" tabindex="0" aria-label="Knowledge map: Reading, Science, then Math — click for the full map">
-          <p class="knowledge-map-label">Knowledge Map</p>
-          <div class="km-path">
-            <div class="km-node reading">
-              <div class="km-circle"></div>
-              <span class="km-name">Reading</span>
-              <span class="km-level">Grade 5</span>
-            </div>
-            <div class="km-node science">
-              <div class="km-circle"></div>
-              <span class="km-name">Science</span>
-              <span class="km-level">Grade 8</span>
-            </div>
-            <div class="km-node math">
-              <div class="km-circle"></div>
-              <span class="km-name">Math</span>
-              <span class="km-level">Algebra II</span>
-            </div>
+          <div class="mastery-card">
+            <p class="mastery-label">Mastery Score</p>
+            <p class="mastery-score"><span id="masteryScore">0</span><span class="mastery-denom"> / 100</span></p>
+            <p class="mastery-inputs" id="masteryInputs">Completion 0 · Progress 0 · Engagement 0 · Mastery 0</p>
           </div>
-          <p class="knowledge-map-hint">View full map →</p>
+          <div class="knowledge-map" id="knowledgeMapBox" role="button" tabindex="0" aria-label="Knowledge map: Reading, Science, then Math — click for the full map">
+            <p class="knowledge-map-label">Knowledge Map</p>
+            <div class="km-path">
+              <div class="km-node reading">
+                <div class="km-circle"></div>
+                <span class="km-name">Reading</span>
+                <span class="km-level">Grade 5</span>
+              </div>
+              <div class="km-node science">
+                <div class="km-circle"></div>
+                <span class="km-name">Science</span>
+                <span class="km-level">Grade 8</span>
+              </div>
+              <div class="km-node math">
+                <div class="km-circle"></div>
+                <span class="km-name">Math</span>
+                <span class="km-level">Algebra II</span>
+              </div>
+            </div>
+            <p class="knowledge-map-hint">View full map →</p>
+          </div>
+          <div class="mini-stat"><span class="subject-dot reading"></span>Reading<strong>Grade 5</strong></div>
+          <div class="mini-stat"><span class="subject-dot science"></span>Science<strong>Grade 8</strong></div>
+          <div class="streak">🔥 <strong id="streakCount">0</strong> day streak</div>
+          <p class="badges-title">Badges</p>
+          <div class="badges" id="badgesRow">
+          </div>
+          <p class="visible-note">Visible to parent and teacher</p>
+          <button class="memory-btn" id="memoryBtn" type="button">View full memory</button>
         </div>
-        <div class="mini-stat"><span class="subject-dot reading"></span>Reading<strong>Grade 5</strong></div>
-        <div class="mini-stat"><span class="subject-dot science"></span>Science<strong>Grade 8</strong></div>
-        <div class="streak">🔥 <strong id="streakCount">0</strong> day streak</div>
-        <p class="badges-title">Badges</p>
-        <div class="badges" id="badgesRow">
-        </div>
-        <p class="visible-note">Visible to parent and teacher</p>
-        <button class="memory-btn" id="memoryBtn" type="button">View full memory</button>
       </aside>
 
     </div>
@@ -1225,6 +1315,13 @@ const chatGraphSplit = document.getElementById('chatGraphSplit');
 const chatColumn     = document.getElementById('chatColumn');
 const graphColumn    = document.getElementById('graphColumn');
 const graphCalculatorEl = document.getElementById('graphCalculator');
+const panelsEl        = document.querySelector('.panels');
+const trackExpandBtn  = document.getElementById('trackExpandBtn');
+const progressExpandBtn = document.getElementById('progressExpandBtn');
+const railLevelLeft   = document.getElementById('railLevelLeft');
+const railXpLeft      = document.getElementById('railXpLeft');
+const railLevelRight  = document.getElementById('railLevelRight');
+const railXpRight     = document.getElementById('railXpRight');
 const xpFill         = document.getElementById('xpFill');
 const xpCaption      = document.getElementById('xpCaption');
 const levelReadout   = document.getElementById('levelReadout');
@@ -1280,6 +1377,10 @@ let desmosCalculator = null;
 let graphPanelOpen = false;
 let chatGraphActiveTab = 'chat'; // narrow-screen tab switch only
 const CHAT_GRAPH_WIDE_QUERY = '(min-width: 1100px)';
+// Graph focus mode (side rails) — only meaningful while graphPanelOpen
+// and the wide layout applies; reset whenever the panel closes.
+let leftRailExpanded = false;
+let rightRailExpanded = false;
 
 // ── Quiz mode state ────────────────────────────────────────────────
 let quizActive = false;
@@ -2399,6 +2500,15 @@ function updateXpUI() {
   xpFill.style.width = Math.min(100, Math.round((xp / xpCapValue) * 100)) + '%';
   xpCaption.textContent = xp + ' / ' + xpCapValue + ' XP';
   levelReadout.textContent = 'LV ' + level;
+  // Mirrored into the Math track / Progress panels' collapsed rails (see
+  // the Graph focus mode CSS) so the student's level/XP stay visible
+  // even while those panels are collapsed to slim icon rails.
+  const railLevelText = 'LV ' + level;
+  const railXpText = xp + ' XP';
+  railLevelLeft.textContent = railLevelText;
+  railXpLeft.textContent = railXpText;
+  railLevelRight.textContent = railLevelText;
+  railXpRight.textContent = railXpText;
   updateMasteryScore();
   updateWishlistXpUI(xp);
   if (wishlistItems.length) {
@@ -2725,12 +2835,15 @@ async function ensureCalculatorReady() {
 }
 
 // Decides, for the current viewport, whether chat/graph show side by side
-// or one-at-a-time via the Chat|Graph tabs — pure DOM update, no network.
+// (with the Math track/Progress side panels collapsed to rails — "graph
+// focus mode") or one-at-a-time via the Chat|Graph tabs — pure DOM
+// update, no network.
 function updateChatGraphLayout() {
   if (!graphPanelOpen) {
     chatGraphTabs.hidden = true;
     chatColumn.hidden = false;
     graphColumn.hidden = true;
+    panelsEl.classList.remove('graph-focus', 'left-expanded', 'right-expanded');
     return;
   }
 
@@ -2747,8 +2860,13 @@ function updateChatGraphLayout() {
   chatTabBtn.classList.toggle('active', isWide || chatGraphActiveTab === 'chat');
   graphTabBtn.classList.toggle('active', isWide || chatGraphActiveTab === 'graph');
 
+  panelsEl.classList.toggle('graph-focus', isWide);
+  panelsEl.classList.toggle('left-expanded', isWide && leftRailExpanded);
+  panelsEl.classList.toggle('right-expanded', isWide && rightRailExpanded);
+
   if (desmosCalculator && !graphColumn.hidden) {
-    // Container may have just become visible/resized — Desmos needs an
+    // Container may have just changed size (becoming visible, the tab
+    // switch, or the focus-mode column widths above) — Desmos needs an
     // explicit nudge rather than relying on autosize alone here.
     requestAnimationFrame(() => desmosCalculator.resize());
   }
@@ -2762,11 +2880,29 @@ async function toggleGraphPanel() {
     graphPanelOpen = true;
   } else {
     graphPanelOpen = false;
+    leftRailExpanded = false;
+    rightRailExpanded = false;
+    trackExpandBtn.textContent = '▸';
+    trackExpandBtn.setAttribute('aria-label', 'Expand math track panel');
+    progressExpandBtn.textContent = '◂';
+    progressExpandBtn.setAttribute('aria-label', 'Expand progress panel');
   }
   updateChatGraphLayout();
 }
 
 graphToggleBtn.addEventListener('click', toggleGraphPanel);
+trackExpandBtn.addEventListener('click', () => {
+  leftRailExpanded = !leftRailExpanded;
+  trackExpandBtn.textContent = leftRailExpanded ? '◂' : '▸';
+  trackExpandBtn.setAttribute('aria-label', leftRailExpanded ? 'Collapse math track panel' : 'Expand math track panel');
+  updateChatGraphLayout();
+});
+progressExpandBtn.addEventListener('click', () => {
+  rightRailExpanded = !rightRailExpanded;
+  progressExpandBtn.textContent = rightRailExpanded ? '▸' : '◂';
+  progressExpandBtn.setAttribute('aria-label', rightRailExpanded ? 'Collapse progress panel' : 'Expand progress panel');
+  updateChatGraphLayout();
+});
 chatTabBtn.addEventListener('click', () => { chatGraphActiveTab = 'chat'; updateChatGraphLayout(); });
 graphTabBtn.addEventListener('click', () => { chatGraphActiveTab = 'graph'; updateChatGraphLayout(); });
 window.addEventListener('resize', () => {
