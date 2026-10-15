@@ -746,31 +746,33 @@
 
   /* ── Boss battle ──────────────────────────────────────────────────── */
   /* Full-viewport takeover — same treatment as .km-fullscreen / the
-     onboarding overlay, not a floating card. */
+     onboarding overlay, not a floating card. Pinned with position:fixed
+     + inset:0 (height:100dvh is a belt-and-suspenders fallback, not the
+     thing actually doing the pinning) and a high z-index so it always
+     wins over the rest of the app underneath. HUD and arena area are
+     PERMANENT children (never display:none-toggled) — only the start/
+     question/pause screens toggle, as absolutely positioned overlays
+     over the arena, so the arena is always what's being measured for
+     scale and is visible behind whichever screen is showing. */
   .battle-fullscreen{padding:0;}
   .battle-stage-wrap{
-    width:100%;height:100%;display:flex;flex-direction:column;
-    background:var(--bg);position:relative;
+    position:fixed;inset:0;height:100dvh;z-index:100;
+    display:flex;flex-direction:column;
+    background:var(--bg);
   }
 
-  .battle-start{
-    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:24px;
+  /* Slim single-row HUD — never wraps, even at phone width: the boss
+     name/tally truncate with an ellipsis before the row would break.
+     flex:none so it never gets squeezed by the arena area below it. */
+  .battle-hud{
+    flex:none;
+    display:flex;align-items:center;gap:8px;flex-wrap:nowrap;
+    padding:8px 10px;background:var(--bg-panel);border-bottom:3px solid var(--border);
+    overflow:hidden;
   }
   .battle-boss-name{
     font-family:var(--font-display);font-weight:400;font-size:16px;
     color:var(--accent);margin:0 0 8px;text-align:center;
-  }
-  .battle-start-sub{font-family:var(--font-body);color:var(--text-muted);text-align:center;margin:0 0 6px;}
-  .battle-start-hint{font-family:var(--font-body);font-size:13px;color:var(--text-muted);text-align:center;margin:0 0 22px;max-width:420px;}
-  .battle-start-buttons{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;}
-
-  /* Slim single-row HUD — never wraps, even at phone width: the boss
-     name/tally truncate with an ellipsis before the row would break. */
-  .battle-hud{
-    display:flex;align-items:center;gap:8px;flex-wrap:nowrap;flex-shrink:0;
-    padding:8px 10px;background:var(--bg-panel);border-bottom:3px solid var(--border);
-    overflow:hidden;
   }
   .battle-hud .battle-boss-name{
     margin:0;flex:0 1 auto;min-width:0;text-align:left;font-size:12px;
@@ -786,13 +788,21 @@
   .battle-hud-btn{margin-left:auto;flex-shrink:0;width:28px;height:28px;font-size:12px;}
   .battle-hud-btn + .battle-hud-btn{margin-left:4px;}
 
-  /* The stage: battle.js sizes .battle-canvas to the largest whole-
-     number multiple of 320x180 that fits here (or a fractional fit on
-     very small screens), then centers it via this flex container. */
-  .battle-stage{
+  /* The arena area: the ONE thing battle.js measures to pick a scale
+     (via ResizeObserver, not just a one-time read) — flex:1 so it
+     actually claims the HUD's leftover height, min-height:0 so flexbox
+     doesn't let its content force it taller than that, grid+place-items
+     so .battle-stage (sized in JS to a whole multiple of 320x180) sits
+     centered inside it without .battle-stage itself needing to be the
+     measured element (which would be circular — it's sized to its own
+     content). */
+  .battle-arena{
     flex:1;min-height:0;position:relative;
-    display:flex;align-items:center;justify-content:center;
+    display:grid;place-items:center;
     background:#0a0a14;overflow:hidden;
+  }
+  .battle-stage{
+    position:relative;
   }
   .battle-canvas{
     display:block;image-rendering:pixelated;image-rendering:crisp-edges;
@@ -805,29 +815,63 @@
     box-shadow:var(--shadow-xs);max-width:90%;z-index:2;
   }
 
-  /* Touch controls overlay the bottom corners of the stage itself. */
-  .battle-touch-controls{position:absolute;inset:auto 0 18px 0;display:flex;justify-content:space-between;padding:0 18px;pointer-events:none;z-index:2;}
+  /* Touch controls overlay the bottom corners of the arena area, not
+     the whole viewport. Shown on a coarse pointer (touchscreen) or once
+     a touch event has actually been seen (battle.js adds .battle-touch-
+     seen to <html> on the first one) — never on mouse+keyboard desktop.
+     [hidden] still wins over all of that (same pattern as .view[hidden]
+     above) so battle.js can still force them off outright. ◀/▶ are
+     grouped in their own flex box so space-between only ever runs
+     between that GROUP and ▲, instead of across all three buttons
+     individually (which is what put ▶ in the middle before). */
+  .battle-touch-controls{
+    position:absolute;inset:auto 0 18px 0;z-index:2;
+    display:none;justify-content:space-between;align-items:center;
+    padding:0 18px;pointer-events:none;
+  }
+  @media (pointer:coarse){
+    .battle-touch-controls{display:flex;}
+  }
+  html.battle-touch-seen .battle-touch-controls{display:flex;}
+  .battle-touch-controls[hidden]{display:none;}
   .battle-touch-controls > *{pointer-events:auto;}
-  .battle-touch-left{margin-right:10px;}
+  .battle-touch-group{display:flex;gap:10px;}
   .battle-touch-btn{
-    width:56px;height:56px;font-size:20px;background:rgba(0,0,0,0.35);color:#fff;
+    width:clamp(56px,9vmin,88px);height:clamp(56px,9vmin,88px);font-size:20px;
+    background:rgba(0,0,0,0.35);color:#fff;
     border:2px solid rgba(255,255,255,0.5);border-radius:50%;cursor:pointer;
     -webkit-user-select:none;user-select:none;touch-action:none;
     -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
   }
   .battle-touch-btn:active{background:rgba(0,0,0,0.55);}
 
-  /* Question/pause overlays are centered over the stage specifically
-     (it's their positioned ancestor, not the viewport). */
-  .battle-question, .battle-pause{
-    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    width:min(90%,480px);z-index:3;
+  /* Start/question/pause screens: absolutely positioned over the arena
+     (never in normal flow — the old bug was .battle-start having its
+     own explicit display:flex, which is an author rule and so always
+     beat the UA's [hidden]{display:none} no matter what battle.js set
+     the hidden PROPERTY to). The [hidden] override below is the same
+     fix already used elsewhere in this file (.view[hidden], etc.) —
+     give it enough specificity that toggling the attribute actually
+     works regardless of the base rule's own display value. */
+  .battle-screen-overlay{
+    position:absolute;inset:0;z-index:3;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(8,8,16,0.72);
+    padding:24px;
+  }
+  .battle-screen-overlay[hidden]{display:none;}
+  .battle-screen-card{
+    width:min(90%,480px);
+    display:flex;flex-direction:column;align-items:center;
     background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
     padding:22px;
   }
+  .battle-start-sub{font-family:var(--font-body);color:var(--text-muted);text-align:center;margin:0 0 6px;}
+  .battle-start-hint{font-family:var(--font-body);font-size:13px;color:var(--text-muted);text-align:center;margin:0 0 22px;max-width:420px;}
+  .battle-start-buttons{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;}
   .battle-feedback{min-height:20px;font-family:var(--font-body);font-size:14px;margin:10px 0 0;color:var(--text);}
-  .battle-pause{text-align:center;}
-  .battle-pause .auth-submit, .battle-pause .ob-option{margin-top:10px;}
+  .battle-screen-card.battle-pause-card{text-align:center;}
+  .battle-pause-card .auth-submit, .battle-pause-card .ob-option{margin-top:10px;}
 
   /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
      squeezed the Math node until overflow-wrap broke subject names
@@ -1148,47 +1192,61 @@
      quizPanel is untouched and is always available as a fallback. All
      rendering/physics lives in battle.js; this is just the DOM shell. -->
 <!-- Full-viewport takeover, same treatment as the Knowledge Map/onboarding
-     overlays — not a floating card. battle.js computes battleStage's
-     pixel size (largest whole-number multiple of 320x180 that fits
-     below the HUD row, or a fractional fit on very small screens). -->
+     overlays — not a floating card. The HUD and arena area are permanent
+     (never hidden/shown as a block) — battle.js measures the arena area
+     itself (#battleArena) to pick battleStage's pixel size (largest
+     whole-number multiple of 320x180 that fits, or a fractional fit on
+     very small screens); start/question/pause are absolute overlays on
+     top of it, toggled by [hidden]. -->
 <div class="overlay-bg hidden battle-fullscreen" id="battleOverlay">
   <div class="battle-stage-wrap" id="battleStageWrap">
 
-    <div class="battle-start" id="battleStart">
-      <p class="battle-boss-name" id="battleBossNameStart"></p>
-      <p class="battle-start-sub">Chapter Quiz · <span id="battleChapterTitleStart"></span></p>
-      <p class="battle-start-hint">Answer all 10 questions to clear the chapter — same grading either way.</p>
-      <div class="battle-start-buttons">
-        <button class="auth-submit" id="battleFightBtn" type="button">Fight</button>
-        <button class="ob-option" id="battleClassicBtn" type="button">Classic quiz</button>
-      </div>
+    <div class="battle-hud" id="battleHud">
+      <p class="battle-boss-name" id="battleBossNameHud"></p>
+      <div class="battle-hp-bar" id="battleHpBar" aria-label="Boss HP" role="img"></div>
+      <p class="battle-tally" id="battleTally">Power-ups 0 / 10 · Correct 0</p>
+      <button class="icon-toggle battle-hud-btn" id="battleFullscreenBtn" type="button" aria-label="Toggle fullscreen" title="Fullscreen (F)">⛶</button>
+      <button class="icon-toggle battle-hud-btn" id="battlePauseBtn" type="button" aria-label="Pause battle" title="Pause (Esc)">⏸</button>
     </div>
 
-    <div class="battle-arena" id="battleArena" hidden>
-      <div class="battle-hud" id="battleHud">
-        <p class="battle-boss-name" id="battleBossNameHud"></p>
-        <div class="battle-hp-bar" id="battleHpBar" aria-label="Boss HP" role="img"></div>
-        <p class="battle-tally" id="battleTally">Power-ups 0 / 10 · Correct 0</p>
-        <button class="icon-toggle battle-hud-btn" id="battleFullscreenBtn" type="button" aria-label="Toggle fullscreen" title="Fullscreen (F)">⛶</button>
-        <button class="icon-toggle battle-hud-btn" id="battlePauseBtn" type="button" aria-label="Pause battle" title="Pause (Esc)">⏸</button>
-      </div>
+    <div class="battle-arena" id="battleArena">
       <div class="battle-stage" id="battleStage">
         <canvas class="battle-canvas" id="battleCanvas" width="320" height="180"></canvas>
         <p class="battle-banner" id="battleBanner" hidden aria-live="polite"></p>
-        <div class="battle-touch-controls" id="battleTouchControls" hidden>
-          <button class="battle-touch-btn battle-touch-left" id="touchLeftBtn" type="button" aria-label="Move left">◀</button>
-          <button class="battle-touch-btn battle-touch-right" id="touchRightBtn" type="button" aria-label="Move right">▶</button>
+        <div class="battle-touch-controls" id="battleTouchControls">
+          <div class="battle-touch-group">
+            <button class="battle-touch-btn battle-touch-left" id="touchLeftBtn" type="button" aria-label="Move left">◀</button>
+            <button class="battle-touch-btn battle-touch-right" id="touchRightBtn" type="button" aria-label="Move right">▶</button>
+          </div>
           <button class="battle-touch-btn battle-touch-jump" id="touchJumpBtn" type="button" aria-label="Jump">▲</button>
         </div>
+      </div>
 
-        <!-- Centered over the stage specifically, not the whole viewport. -->
-        <div class="battle-question" id="battleQuestionOverlay" hidden>
+      <!-- Absolutely positioned over the arena (see .battle-screen-overlay) —
+           the arena/canvas is visible behind this, not replaced by it. -->
+      <div class="battle-screen-overlay" id="battleStart">
+        <div class="battle-screen-card">
+          <p class="battle-boss-name" id="battleBossNameStart"></p>
+          <p class="battle-start-sub">Chapter Quiz · <span id="battleChapterTitleStart"></span></p>
+          <p class="battle-start-hint">Answer all 10 questions to clear the chapter — same grading either way.</p>
+          <div class="battle-start-buttons">
+            <button class="auth-submit" id="battleFightBtn" type="button">Fight</button>
+            <button class="ob-option" id="battleClassicBtn" type="button">Classic quiz</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="battle-screen-overlay" id="battleQuestionOverlay" hidden>
+        <div class="battle-screen-card">
           <p class="ob-level-label" id="battleQuestionChapter"></p>
           <p class="ob-question" id="battleQuestionText"></p>
           <div class="ob-options" id="battleQuestionOptions"></div>
           <p class="battle-feedback" id="battleFeedback" aria-live="polite"></p>
         </div>
-        <div class="battle-pause" id="battlePauseMenu" hidden>
+      </div>
+
+      <div class="battle-screen-overlay" id="battlePauseMenu" hidden>
+        <div class="battle-screen-card battle-pause-card">
           <p class="placement-title">Paused</p>
           <button class="auth-submit" id="battleResumeBtn" type="button">Resume</button>
           <button class="ob-option" id="battlePauseClassicBtn" type="button">Switch to Classic quiz</button>

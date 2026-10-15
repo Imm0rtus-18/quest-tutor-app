@@ -109,6 +109,16 @@
   let listenersBound = false;
   let worldCanvas = null; // pre-rendered ground/platforms/parallax — rebuilt only on theme change
   let worldTheme = null;
+  let arenaResizeObserver = null;
+
+  // One-time, session-wide: a touch event seen anywhere means the touch
+  // controls should show even on a device CSS alone can't tell apart
+  // from a mouse (a touchscreen laptop with (pointer:coarse) false).
+  // Bound once at module load, not per-battle — see
+  // html.battle-touch-seen in index.html's CSS.
+  window.addEventListener('touchstart', () => {
+    document.documentElement.classList.add('battle-touch-seen');
+  }, { once: true, passive: true });
 
   function freshState(adj) {
     return {
@@ -172,17 +182,25 @@
     renderHpBar();
     updateTally();
 
-    el.arena.hidden = true;
     el.question.hidden = true;
     el.pauseMenu.hidden = true;
     el.start.hidden = false;
     el.banner.hidden = true;
 
-    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-    el.touchControls.hidden = !isTouch;
-
     el.overlay.classList.remove('hidden');
     bindListeners();
+
+    if (arenaResizeObserver) arenaResizeObserver.disconnect();
+    if (window.ResizeObserver) {
+      arenaResizeObserver = new ResizeObserver(() => computeStageScale());
+      arenaResizeObserver.observe(el.arena);
+    }
+    computeStageScale();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(computeStageScale);
+
+    // One static frame now, so the arena (boss/Nova/world) is visible
+    // behind the semi-transparent start screen instead of blank black.
+    render();
   }
 
   function destroy() {
@@ -190,6 +208,7 @@
     exitFullscreenIfActive();
     el.overlay && el.overlay.classList.add('hidden');
     unbindListeners();
+    if (arenaResizeObserver) { arenaResizeObserver.disconnect(); arenaResizeObserver = null; }
     S = null;
   }
 
@@ -306,24 +325,31 @@
     listenersBound = false;
   }
 
+  // Measures #battleArena (the flex:1 area), never #battleStage — the
+  // stage wraps tightly around the canvas, so measuring it instead
+  // would be circular (always ~its own content size) and is exactly how
+  // this silently fell back to 1x before.
   function computeStageScale() {
-    if (!el.stage) return;
-    const availW = el.stage.clientWidth;
-    const availH = el.stage.clientHeight;
+    if (!el.arena) return;
+    const availW = el.arena.clientWidth;
+    const availH = el.arena.clientHeight;
     if (availW <= 0 || availH <= 0) return;
 
     const integerScale = Math.floor(Math.min(availW / CANVAS_W, availH / CANVAS_H));
-    let cssW, cssH;
+    let cssW, cssH, scaleLabel;
     if (integerScale >= 1) {
       cssW = CANVAS_W * integerScale;
       cssH = CANVAS_H * integerScale;
+      scaleLabel = integerScale + 'x';
     } else {
       const fitScale = Math.min(availW / CANVAS_W, availH / CANVAS_H);
       cssW = CANVAS_W * fitScale;
       cssH = CANVAS_H * fitScale;
+      scaleLabel = fitScale.toFixed(2) + 'x (fractional fit)';
     }
     el.canvas.style.width = cssW + 'px';
     el.canvas.style.height = cssH + 'px';
+    console.log(`[battle] arena area ${availW}x${availH}px -> scale ${scaleLabel}, canvas ${cssW.toFixed(0)}x${cssH.toFixed(0)}px`);
   }
 
   function toggleFullscreen() {
@@ -376,7 +402,6 @@
 
   function onFightClicked() {
     el.start.hidden = true;
-    el.arena.hidden = false;
     computeStageScale();
     enterPlaying();
     startLoop();
