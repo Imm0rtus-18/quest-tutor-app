@@ -20,58 +20,49 @@
   const NOVA_SPRITE_SVG = '<svg class="nova-sprite" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="3" y="0" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="1" width="4" height="1" fill="#FAF6EF"/><rect x="1" y="2" width="6" height="1" fill="#FAF6EF"/><rect x="0" y="3" width="2" height="1" fill="#FAF6EF"/><rect x="2" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="3" y="3" width="1" height="1" fill="#FAF6EF"/><rect x="4" y="3" width="1" height="1" fill="#1A1A1A"/><rect x="5" y="3" width="3" height="1" fill="#FAF6EF"/><rect x="0" y="4" width="8" height="1" fill="#FAF6EF"/><rect x="1" y="5" width="6" height="1" fill="#FAF6EF"/><rect x="2" y="6" width="4" height="1" fill="#FAF6EF"/><rect x="3" y="7" width="2" height="1" fill="#FAF6EF"/></svg>';
 
   // ---------------------------------------------------------------------
-  // Palettes — every tile type gets a light (day) and dark (night) set.
+  // Palettes — every tile type gets a light (day) set, authored below,
+  // and a dark (night) set computed from it by nightTint() so night is
+  // always a genuine darker TINT of day (same hue/saturation, lower
+  // lightness plus a faint cool shift) rather than a separately-picked,
+  // near-black color that loses the art.
   // ---------------------------------------------------------------------
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgbToHex(r, g, b) {
+    const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+    return '#' + [r, g, b].map(v => clamp(v).toString(16).padStart(2, '0')).join('');
+  }
+  function nightTint(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    return rgbToHex(r * 0.55, g * 0.55, b * 0.55 + 10);
+  }
+
   const PALETTES = {
-    water: {
-      light: { base: '#4A90C4', deep: '#3A7AAE', shimmer: '#8FD0EE' },
-      dark: { base: '#17334A', deep: '#102638', shimmer: '#3E6B8C' }
-    },
-    sand: {
-      light: { base: '#E8D28A', speck: '#D0B86C' },
-      dark: { base: '#7C6A42', speck: '#5E4F30' }
-    },
-    grass: {
-      light: { base: '#5FAE4A', shade: '#4A8F3A', bright: '#7AC768' },
-      dark: { base: '#27461F', shade: '#1C3617', bright: '#345A2B' }
-    },
-    grassEdge: {
-      light: { base: '#5FAE4A', shade: '#3E7A30', bright: '#8FD67A' },
-      dark: { base: '#27461F', shade: '#162C13', bright: '#3E6632' }
-    },
-    tree: {
-      light: { canopy: '#3E8E3E', canopyDark: '#2A6E2A', canopyLight: '#5CAE52', trunk: '#6B4A2E' },
-      dark: { canopy: '#1A3A1A', canopyDark: '#102810', canopyLight: '#244C22', trunk: '#3E2C1C' }
-    },
-    path: {
-      light: { base: '#C9A876', speck: '#AD8C5C' },
-      dark: { base: '#5E4C30', speck: '#473A24' }
-    },
-    cliffTop: {
-      light: { grass: '#5FAE4A', lip: '#9C7A4E', lipDark: '#7E5F3A' },
-      dark: { grass: '#27461F', lip: '#4E3C26', lipDark: '#3A2C1C' }
-    },
-    cliffFace: {
-      light: { band1: '#B08E5C', band2: '#977646', band3: '#7C5F35', band4: '#604828' },
-      dark: { band1: '#5A4730', band2: '#493823', band3: '#382A1A', band4: '#281D12' }
-    },
-    rock: {
-      light: { base: '#8E8E92', shade: '#6E6E72', highlight: '#ACACB0' },
-      dark: { base: '#45454A', shade: '#323236', highlight: '#5A5A60' }
-    },
-    snow: {
-      light: { base: '#F2F6FA', shade: '#D6E2EC' },
-      dark: { base: '#A8B8C4', shade: '#7E92A0' }
-    },
-    cloud: {
-      light: { base: '#FFFFFF', shade: '#DCE6EE' },
-      dark: { base: '#B8C6D2', shade: '#8898A6' }
-    },
-    platform: {
-      light: { base: '#BCA8DA', edge: '#9A82C2', glow: '#E0D2F4' },
-      dark: { base: '#4A3A68', edge: '#362852', glow: '#645088' }
-    }
+    water: { light: { base: '#4A90C4', deep: '#3A7AAE', shimmer: '#8FD0EE', sparkle: 'rgba(255,255,255,0.85)' } },
+    sand: { light: { base: '#E8D28A', speck: '#D0B86C', speck2: '#F2DFA0' } },
+    grass: { light: { base: '#5FAE4A', shade: '#4A8F3A', bright: '#7AC768', highlight: '#9CDC84' } },
+    grassEdge: { light: { base: '#5FAE4A', shade: '#3E7A30', bright: '#8FD67A', sand: '#E8D28A' } },
+    tree: { light: { canopy: '#3E8E3E', canopyDark: '#2A6E2A', canopyLight: '#5CAE52', trunk: '#6B4A2E', trunkDark: '#4E3620' } },
+    path: { light: { base: '#C9A876', speck: '#AD8C5C', speck2: '#DEC091' } },
+    cliffTop: { light: { grass: '#5FAE4A', lip: '#9C7A4E', lipDark: '#7E5F3A' } },
+    cliffFace: { light: { band1: '#B08E5C', band2: '#977646', band3: '#7C5F35', band4: '#604828' } },
+    rock: { light: { base: '#8E8E92', shade: '#6E6E72', highlight: '#ACACB0' } },
+    snow: { light: { base: '#F2F6FA', shade: '#D6E2EC', highlight: '#FFFFFF', blueShade: '#C3D6E8' } },
+    cloud: { light: { base: '#FFFFFF', shade: '#DCE6EE', highlight: '#FFFFFF' } },
+    platform: { light: { base: '#BCA8DA', edge: '#9A82C2', glow: '#E0D2F4' } }
   };
+
+  Object.keys(PALETTES).forEach(tile => {
+    const light = PALETTES[tile].light;
+    const dark = {};
+    Object.keys(light).forEach(key => {
+      // rgba() sparkle/overlay colors read fine in both themes as-is.
+      dark[key] = light[key].startsWith('#') ? nightTint(light[key]) : light[key];
+    });
+    PALETTES[tile].dark = dark;
+  });
 
   function pal(tile, theme) {
     const p = PALETTES[tile];
@@ -110,63 +101,117 @@
     ctx.fillRect(x, y, w, h);
   }
 
+  // Picks one of `count` deterministic pattern variants for this tile
+  // position, so neighboring same-type tiles vary but never flicker.
+  function variantIndex(r, c, salt, count) {
+    return Math.floor(hash2(r, c, salt) * count);
+  }
+
   function drawWater(ctx, px, py, r, c, theme, shimmerFrame) {
     const p = pal('water', theme);
     rect(ctx, px, py, S, S, p.base);
-    // a few darker "deep water" pixels for texture
-    const n = hash2(r, c, 1);
-    if (n < 0.35) rect(ctx, px + 2, py + 10, 4, 2, p.deep);
-    if (n > 0.6) rect(ctx, px + 9, py + 3, 3, 2, p.deep);
-    // 2-frame stepped shimmer: alternating highlight pixels
+    // deep-water texture: 4 pattern variants so the open ocean doesn't
+    // read as a flat color block
+    const deepVariants = [
+      [{ dx: 2, dy: 10, w: 4, h: 2 }],
+      [{ dx: 9, dy: 3, w: 3, h: 2 }],
+      [{ dx: 1, dy: 5, w: 3, h: 2 }, { dx: 10, dy: 11, w: 2, h: 2 }],
+      [{ dx: 6, dy: 2, w: 2, h: 2 }, { dx: 11, dy: 9, w: 3, h: 1 }]
+    ];
+    deepVariants[variantIndex(r, c, 1, deepVariants.length)]
+      .forEach(d => rect(ctx, px + d.dx, py + d.dy, d.w, d.h, p.deep));
+    // 2-frame stepped shimmer, plus an occasional white sparkle pixel that
+    // only appears on one of the two frames (a twinkle, not a steady dot)
     const shimmerOn = (Math.floor(hash2(r, c, 2) * 2) === shimmerFrame);
     if (shimmerOn) {
       rect(ctx, px + 5, py + 6, 3, 1, p.shimmer);
       rect(ctx, px + 11, py + 11, 2, 1, p.shimmer);
+      if (hash2(r, c, 23) < 0.4) rect(ctx, px + 7, py + 9, 1, 1, p.sparkle);
     } else {
       rect(ctx, px + 2, py + 4, 2, 1, p.shimmer);
       rect(ctx, px + 8, py + 13, 3, 1, p.shimmer);
+      if (hash2(r, c, 24) < 0.4) rect(ctx, px + 12, py + 5, 1, 1, p.sparkle);
     }
   }
 
   function drawSand(ctx, px, py, r, c, theme) {
     const p = pal('sand', theme);
     rect(ctx, px, py, S, S, p.base);
-    const n = hash2(r, c, 3);
-    rect(ctx, px + Math.floor(n * 10) + 2, py + Math.floor(hash2(r, c, 4) * 10) + 2, 2, 2, p.speck);
-    rect(ctx, px + Math.floor(hash2(r, c, 5) * 10) + 1, py + Math.floor(hash2(r, c, 6) * 10) + 1, 1, 1, p.speck);
+    const variants = [
+      [{ dx: 3, dy: 3, w: 2, h: 2, k: 'speck' }, { dx: 10, dy: 9, w: 1, h: 1, k: 'speck2' }],
+      [{ dx: 8, dy: 2, w: 2, h: 2, k: 'speck2' }, { dx: 3, dy: 11, w: 2, h: 1, k: 'speck' }],
+      [{ dx: 11, dy: 6, w: 1, h: 1, k: 'speck' }, { dx: 5, dy: 9, w: 2, h: 2, k: 'speck2' }],
+      [{ dx: 2, dy: 2, w: 1, h: 1, k: 'speck' }, { dx: 9, dy: 12, w: 2, h: 1, k: 'speck2' }]
+    ];
+    variants[variantIndex(r, c, 3, variants.length)]
+      .forEach(d => rect(ctx, px + d.dx, py + d.dy, d.w, d.h, p[d.k]));
   }
 
   function drawGrass(ctx, px, py, r, c, theme, dithered) {
     const p = pal(dithered ? 'grassEdge' : 'grass', theme);
     rect(ctx, px, py, S, S, p.base);
-    const n1 = hash2(r, c, 7), n2 = hash2(r, c, 8);
-    // blade-texture pixels, denser/dithered near island edges
-    const count = dithered ? 5 : 3;
-    for (let i = 0; i < count; i++) {
-      const bx = px + Math.floor(hash2(r, c, 10 + i) * (S - 2));
-      const by = py + Math.floor(hash2(r, c, 20 + i) * (S - 2));
-      rect(ctx, bx, by, 1, 2, i % 2 === 0 ? p.shade : p.bright);
+
+    if (dithered) {
+      // ordered-dither checker patches blending toward the lighter
+      // sand/cliff tone this edge tile borders, picked from 4 edge sides
+      // so the dither band isn't always on the same side of the tile.
+      const edgeDithers = [
+        [{ dx: 0, dy: 0 }, { dx: 4, dy: 0 }, { dx: 8, dy: 0 }, { dx: 12, dy: 0 }, { dx: 2, dy: 2 }, { dx: 10, dy: 2 }],
+        [{ dx: 0, dy: 12 }, { dx: 4, dy: 14 }, { dx: 8, dy: 12 }, { dx: 12, dy: 14 }, { dx: 2, dy: 14 }, { dx: 10, dy: 12 }],
+        [{ dx: 0, dy: 0 }, { dx: 0, dy: 4 }, { dx: 0, dy: 8 }, { dx: 0, dy: 12 }, { dx: 2, dy: 2 }, { dx: 2, dy: 10 }],
+        [{ dx: 12, dy: 0 }, { dx: 14, dy: 4 }, { dx: 12, dy: 8 }, { dx: 14, dy: 12 }, { dx: 14, dy: 2 }, { dx: 12, dy: 10 }]
+      ];
+      edgeDithers[variantIndex(r, c, 9, edgeDithers.length)]
+        .forEach(d => rect(ctx, px + d.dx, py + d.dy, 2, 2, p.sand));
     }
+
+    // blade-texture: 4 variants, mixing shadow/highlight pixels
+    const bladeVariants = [
+      [[2, 3, 'shade'], [9, 7, 'bright'], [5, 11, 'shade']],
+      [[11, 2, 'bright'], [4, 6, 'shade'], [7, 12, 'bright'], [2, 9, 'shade']],
+      [[6, 1, 'shade'], [12, 9, 'bright'], [3, 5, dithered ? 'bright' : 'highlight']],
+      [[1, 12, 'bright'], [9, 3, 'shade'], [5, 8, 'bright'], [12, 13, 'shade']]
+    ];
+    bladeVariants[variantIndex(r, c, 7, bladeVariants.length)]
+      .forEach(([dx, dy, key]) => rect(ctx, px + dx, py + dy, 1, 2, p[key]));
   }
 
   function drawTree(ctx, px, py, r, c, theme) {
     // trees sit on a grass base
     drawGrass(ctx, px, py, r, c, theme, false);
     const p = pal('tree', theme);
-    // trunk
-    rect(ctx, px + 7, py + 11, 2, 4, p.trunk);
-    // round canopy via a small stepped pixel cluster
-    rect(ctx, px + 4, py + 3, 8, 2, p.canopyDark);
-    rect(ctx, px + 3, py + 5, 10, 4, p.canopy);
-    rect(ctx, px + 4, py + 9, 8, 2, p.canopyDark);
-    rect(ctx, px + 5, py + 5, 3, 2, p.canopyLight);
+    const shapes = [
+      { trunkX: 7, canopyX: 3, canopyW: 10, topY: 3 },
+      { trunkX: 6, canopyX: 4, canopyW: 8, topY: 2 },
+      { trunkX: 8, canopyX: 4, canopyW: 9, topY: 4 }
+    ];
+    const v = shapes[variantIndex(r, c, 19, shapes.length)];
+    const canopyH = v.canopyW - 2;
+
+    // trunk, with a shaded base
+    rect(ctx, px + v.trunkX, py + 11, 2, 4, p.trunk);
+    rect(ctx, px + v.trunkX, py + 13, 2, 2, p.trunkDark);
+
+    // round canopy: a dark 1px outline silhouette behind progressively
+    // inset fill bands reads as a soft round edge at this pixel scale
+    rect(ctx, px + v.canopyX - 1, py + v.topY + 1, v.canopyW + 2, canopyH, OUTLINE);
+    rect(ctx, px + v.canopyX, py + v.topY, v.canopyW, 2, p.canopyDark);
+    rect(ctx, px + v.canopyX - 1, py + v.topY + 2, v.canopyW + 2, canopyH - 4, p.canopy);
+    rect(ctx, px + v.canopyX, py + v.topY + canopyH - 2, v.canopyW, 2, p.canopyDark);
+    rect(ctx, px + v.canopyX + 2, py + v.topY + 2, 3, 2, p.canopyLight);
   }
 
   function drawPath(ctx, px, py, r, c, theme) {
     const p = pal('path', theme);
     rect(ctx, px, py, S, S, p.base);
-    const n = hash2(r, c, 11);
-    rect(ctx, px + Math.floor(n * 10) + 2, py + Math.floor(hash2(r, c, 12) * 10) + 2, 2, 1, p.speck);
+    const variants = [
+      [{ dx: 3, dy: 3, k: 'speck' }],
+      [{ dx: 9, dy: 9, k: 'speck2' }],
+      [{ dx: 6, dy: 11, k: 'speck' }, { dx: 11, dy: 4, k: 'speck2' }],
+      [{ dx: 2, dy: 8, k: 'speck2' }]
+    ];
+    variants[variantIndex(r, c, 11, variants.length)]
+      .forEach(d => rect(ctx, px + d.dx, py + d.dy, 2, 1, p[d.k]));
   }
 
   function drawCliffTop(ctx, px, py, r, c, theme) {
@@ -183,27 +228,48 @@
     rect(ctx, px, py + bandH, S, bandH, p.band2);
     rect(ctx, px, py + bandH * 2, S, bandH, p.band3);
     rect(ctx, px, py + bandH * 3, S, bandH, p.band4);
-    // vertical strata separators for an angular, layered look
-    const n = hash2(r, c, 13);
-    const sx = px + 3 + Math.floor(n * 8);
-    rect(ctx, sx, py, 1, S, p.band4);
+    // dark outline along the exposed top edge
+    rect(ctx, px, py, S, 1, OUTLINE);
+    // vertical strata separators: 4 variants of position/count for an
+    // angular, layered look that isn't identical tile to tile
+    const dividerVariants = [
+      [{ dx: 3, dy: 0, h: S }],
+      [{ dx: 9, dy: 0, h: S }],
+      [{ dx: 5, dy: 0, h: bandH * 2 }, { dx: 11, dy: bandH, h: bandH * 3 }],
+      [{ dx: 2, dy: 0, h: bandH * 3 }, { dx: 8, dy: bandH * 2, h: bandH }]
+    ];
+    dividerVariants[variantIndex(r, c, 13, dividerVariants.length)]
+      .forEach(d => rect(ctx, px + d.dx, py + d.dy, 1, d.h, p.band4));
   }
 
   function drawRock(ctx, px, py, r, c, theme) {
     const p = pal('rock', theme);
     rect(ctx, px, py, S, S, pal('water', theme).base); // rocks rest on water/void at coast
-    const n = hash2(r, c, 14);
-    const bx = px + 2 + Math.floor(n * 3), by = py + 3 + Math.floor(hash2(r, c, 15) * 3);
-    rect(ctx, bx, by, 11 - Math.floor(n * 3), 10, p.shade);
-    rect(ctx, bx + 1, by + 1, 8, 7, p.base);
-    rect(ctx, bx + 2, by + 1, 3, 2, p.highlight);
+    const variants = [
+      { bx: 2, by: 3, w: 11 },
+      { bx: 3, by: 4, w: 9 },
+      { bx: 1, by: 2, w: 10 },
+      { bx: 2, by: 3, w: 8 }
+    ];
+    const v = variants[variantIndex(r, c, 14, variants.length)];
+    rect(ctx, px + v.bx, py + v.by, v.w, 10, p.shade);
+    rect(ctx, px + v.bx + 1, py + v.by + 1, v.w - 3, 7, p.base);
+    rect(ctx, px + v.bx + 2, py + v.by + 1, 3, 2, p.highlight);
   }
 
   function drawSnow(ctx, px, py, r, c, theme) {
     const p = pal('snow', theme);
     rect(ctx, px, py, S, S, p.base);
-    const n = hash2(r, c, 16);
-    if (n < 0.4) rect(ctx, px + Math.floor(n * 10) + 2, py + Math.floor(hash2(r, c, 17) * 10) + 2, 3, 2, p.shade);
+    // soft blue-white shading: every snow tile gets a highlight patch and
+    // a cool shadow patch, picked from 4 layouts, instead of flat fill
+    const variants = [
+      [{ dx: 2, dy: 2, w: 4, h: 3, k: 'highlight' }, { dx: 9, dy: 10, w: 4, h: 3, k: 'blueShade' }],
+      [{ dx: 9, dy: 2, w: 3, h: 3, k: 'highlight' }, { dx: 2, dy: 10, w: 4, h: 3, k: 'shade' }],
+      [{ dx: 5, dy: 5, w: 3, h: 3, k: 'blueShade' }, { dx: 11, dy: 1, w: 3, h: 2, k: 'highlight' }],
+      [{ dx: 1, dy: 7, w: 3, h: 3, k: 'shade' }, { dx: 8, dy: 3, w: 4, h: 2, k: 'highlight' }]
+    ];
+    variants[variantIndex(r, c, 16, variants.length)]
+      .forEach(d => rect(ctx, px + d.dx, py + d.dy, d.w, d.h, p[d.k]));
   }
 
   function drawCloud(ctx, px, py, r, c, theme) {
@@ -211,7 +277,16 @@
     rect(ctx, px, py, S, S, pal('water', theme).base);
     rect(ctx, px + 2, py + 5, 12, 7, p.base);
     rect(ctx, px + 4, py + 3, 8, 4, p.base);
-    rect(ctx, px + 3, py + 10, 10, 2, p.shade);
+    // soft shading: a highlight patch and a shadow patch every tile, not
+    // only sometimes, so clouds read as rounded rather than flat
+    const variants = [
+      { hx: 3, hy: 4, sx: 9, sy: 10 },
+      { hx: 5, hy: 3, sx: 3, sy: 10 },
+      { hx: 6, hy: 5, sx: 10, sy: 11 }
+    ];
+    const v = variants[variantIndex(r, c, 22, variants.length)];
+    rect(ctx, px + v.hx, py + v.hy, 4, 2, p.highlight);
+    rect(ctx, px + v.sx, py + v.sy, 4, 2, p.shade);
   }
 
   function drawPlatform(ctx, px, py, r, c, theme) {
@@ -219,8 +294,9 @@
     rect(ctx, px, py, S, S, pal('water', theme).base);
     rect(ctx, px + 1, py + 2, 14, 11, p.edge);
     rect(ctx, px + 2, py + 3, 12, 8, p.base);
-    const n = hash2(r, c, 18);
-    if (n < 0.3) rect(ctx, px + 4, py + 4, 3, 1, p.glow);
+    const variants = [{ dx: 4, dy: 4 }, { dx: 9, dy: 7 }, { dx: 6, dy: 9 }, null];
+    const v = variants[variantIndex(r, c, 18, variants.length)];
+    if (v) rect(ctx, px + v.dx, py + v.dy, 3, 1, p.glow);
   }
 
   const DRAWERS = {
