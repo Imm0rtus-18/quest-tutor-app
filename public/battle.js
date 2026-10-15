@@ -4,25 +4,25 @@
 // every answer goes through POST /api/quiz/answer (one question, no
 // correct option ever returned) and the final pass/fail always comes
 // from the SAME POST /api/quiz/submit the Classic quiz calls, so both
-// paths share one source of truth. All art here is solid-color
-// placeholder shapes (Stage 1) — no resemblance to any existing game is
-// intended or needed since there's no art yet.
+// paths share one source of truth.
 //
 // Public API: window.BossBattle.start(adj, callbacks) / .destroy()
 // adj: the topic_adjustment object from the server — { quiz_session_id,
 //   chapter_id, chapter_title, boss, questions } — questions never carry
 //   correctIndex.
-// callbacks: { onSwitchToClassic(partial), onComplete(result) }
+// callbacks: { sounds, confetti, onSwitchToClassic(partial), onComplete(result) }
 //   partial: { answeredSoFar: [{questionId,selectedIndex}], nextIndex }
 //   result: the exact shape POST /api/quiz/submit returns.
 (function () {
   'use strict';
 
-  // Physics constants and the arena layout both come from their own
-  // dual-environment (browser + Node) modules now — battle-physics.js
-  // and battle-arena.js — so scripts/test-battle-reachability.js proves
-  // reachability against the exact same numbers the real game runs,
-  // never a hand-copied duplicate that could drift out of sync.
+  // Physics, arena layout, and attack-phase data all come from their own
+  // dual-environment (browser + Node) modules — battle-physics.js,
+  // battle-arena.js, battle-attacks.js — so
+  // scripts/test-battle-reachability.js proves both platform reachability
+  // and projectile-spacing safety against the exact numbers the real
+  // game runs, never a hand-copied duplicate that could drift out of
+  // sync. battle-sprites.js is the (browser-only) pixel-art engine.
   const PHYS = window.BattlePhysics.CONST;
   const CANVAS_W = PHYS.CANVAS_W, CANVAS_H = PHYS.CANVAS_H;
   const STEP_MS = PHYS.STEP_MS;
@@ -33,42 +33,35 @@
   const JUMP_CUT_MULT = PHYS.JUMP_CUT_MULT;
   const COYOTE_MS = PHYS.COYOTE_MS;
   const JUMP_BUFFER_MS = PHYS.JUMP_BUFFER_MS;
-  const PLAYER_SIZE = PHYS.PLAYER_SIZE; // 8x8 sprite at 2x scale
+  const PLAYER_SIZE = PHYS.PLAYER_SIZE;
   const GROUND_Y = PHYS.GROUND_Y;
-
-  const INVULN_MS = 1000;
-  const MAX_PROJECTILES = 8;
-  const PROJ_MIN_MS = 1200, PROJ_MAX_MS = 2000;
-  const ORB_MIN_MS = 4000, ORB_MAX_MS = 7000;
-  const HP_SEGMENTS = 10;
 
   const ARENA = window.BattleArena;
   const SURFACES = ARENA.SURFACES;
   const ORB_SURFACES = ARENA.ORB_SURFACES;
-  const BOSS_POS = ARENA.BOSS_POS;
+  const BOSS_POSITIONS = [ARENA.BOSS_POS, ARENA.BOSS_POS_ALT];
   const PLAYER_START = ARENA.PLAYER_START;
 
-  // Same 8x8 pixel pattern as the existing .nova-sprite SVG markup used
-  // elsewhere in the app (chat header, auth screen) — reused here so the
-  // platformer player is recognizably "Nova" without needing image
-  // assets. [x, y, w, h, isDark]
-  const NOVA_PIXELS = [
-    [3, 0, 2, 1], [2, 1, 4, 1], [1, 2, 6, 1], [0, 3, 2, 1],
-    [2, 3, 1, 1, true], [3, 3, 1, 1], [4, 3, 1, 1, true], [5, 3, 3, 1],
-    [0, 4, 8, 1], [1, 5, 6, 1], [2, 6, 4, 1], [3, 7, 2, 1]
-  ];
-  const NOVA_CREAM = '#FAF6EF', NOVA_DARK = '#1A1A1A';
+  const ATTACKS = window.BattleAttacks;
+
+  const INVULN_MS = 1000;
+  const MAX_PROJECTILES = 8;
+  const MAX_PARTICLES = 60;
+  const ORB_MIN_MS = 4000, ORB_MAX_MS = 7000;
+  const HP_SEGMENTS = 10;
+  const MAX_FLASHES_PER_SEC = 3; // no strobing
 
   function rand(min, max) { return min + Math.random() * (max - min); }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function rectsOverlap(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
+  function getTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
 
   // ---------------------------------------------------------------------
-  // DOM refs (resolved lazily — this script loads before the body in some
-  // cache states would be fine either way since start() is always called
-  // well after DOMContentLoaded, from a real user action).
+  // DOM refs
   // ---------------------------------------------------------------------
   let el = {};
   function cacheEls() {
@@ -114,18 +107,29 @@
   let callbacks = {};
   let reduceMotion = false;
   let listenersBound = false;
+  let worldCanvas = null; // pre-rendered ground/platforms/parallax — rebuilt only on theme change
+  let worldTheme = null;
 
   function freshState(adj) {
     return {
-      phase: 'start', // start | playing | question | resolving | outcome
+      phase: 'start', // start | playing | question | outcome
       questions: adj.questions || [],
       questionIndex: 0,
       sessionId: adj.quiz_session_id,
       bossData: adj.boss,
+      chapterId: adj.chapter_id,
       chapterTitle: adj.chapter_title || 'this chapter',
-      recordedAnswers: [], // [{questionId, selectedIndex}] — mirrors what the server has recorded
+      recordedAnswers: [],
       correctCount: 0,
       bossHp: HP_SEGMENTS,
+      bossPosIndex: 0,
+      bossBobPhase: 0,
+      attackPattern: ATTACKS.phaseForHp(HP_SEGMENTS),
+      attackState: 'idle', // idle | windup | firing
+      nextAttackAt: 1200,
+      windupUntil: 0,
+      pendingShots: [], // [{delayMs, low}] queued during windup, consumed during firing
+      warningMarkerX: null,
       simTime: 0,
       lastFrameAt: 0,
       accumulator: 0,
@@ -134,12 +138,17 @@
       jumpPressedAt: -Infinity,
       lastGroundedAt: -Infinity,
       player: { x: PLAYER_START.x, y: PLAYER_START.y, vx: 0, vy: 0, facing: 1, onGround: true, invulnUntil: 0 },
+      novaAnim: 'idle', novaFrameTimer: 0, novaRunFrame: 0,
       projectiles: [],
-      nextProjectileAt: 1200,
       orb: null,
       nextOrbAt: 2500,
+      orbPulse: 0,
       shots: [],
-      fizzles: [],
+      particles: [],
+      flashTimestamps: [], // real Date.now() times of recent flashes, for the 3/s cap
+      shakeUntil: 0,
+      bossFlashUntil: 0,
+      fizzleUntil: 0,
       selectedOption: null
     };
   }
@@ -152,8 +161,10 @@
     callbacks = cbs || {};
     reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     S = freshState(adj);
+    S.sprites = window.BattleSprites.buildAll();
     ctx = el.canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
+    ensureWorldCanvas();
 
     el.bossNameStart.textContent = S.bossData ? S.bossData.name : 'the chapter boss';
     el.chapterTitleStart.textContent = S.chapterTitle;
@@ -182,23 +193,68 @@
     S = null;
   }
 
+  // Pre-renders the static ground/platform/parallax-background world ONCE
+  // (not per frame) — rebuilt only when the theme toggle actually flips
+  // while a battle is open, consuming the theme the same way the
+  // Knowledge Map/Desmos panel do, never touching the toggle itself.
+  function ensureWorldCanvas() {
+    const theme = getTheme();
+    if (worldCanvas && worldTheme === theme) return;
+    worldTheme = theme;
+    worldCanvas = document.createElement('canvas');
+    worldCanvas.width = CANVAS_W;
+    worldCanvas.height = CANVAS_H;
+    const wctx = worldCanvas.getContext('2d');
+    wctx.imageSmoothingEnabled = false;
+    renderWorldArt(wctx, theme);
+  }
+
+  function renderWorldArt(wctx, theme) {
+    const dark = theme === 'dark';
+    const sky1 = dark ? '#171326' : '#1b1b3a';
+    const sky2 = dark ? '#201a35' : '#272752';
+    wctx.fillStyle = sky1;
+    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // 2-layer parallax: far (small, dim) and near (bigger, slightly
+    // brighter) silhouette hills — static (the "parallax" read comes
+    // from the two layers' different, non-aligned rhythms, not motion).
+    wctx.fillStyle = dark ? '#241f3d' : '#30306a';
+    for (let x = -20; x < CANVAS_W + 20; x += 46) wctx.fillRect(x, 108, 34, 30);
+    wctx.fillStyle = sky2;
+    for (let x = -30; x < CANVAS_W + 30; x += 64) wctx.fillRect(x, 122, 48, 26);
+
+    // Ground: a textured strip, not a flat fill.
+    const groundTop = dark ? '#3a2d1c' : '#5a4328';
+    const groundShade = dark ? '#241b11' : '#3a2c18';
+    wctx.fillStyle = groundTop;
+    wctx.fillRect(0, GROUND_Y, CANVAS_W, 6);
+    wctx.fillStyle = groundShade;
+    wctx.fillRect(0, GROUND_Y + 6, CANVAS_W, CANVAS_H - GROUND_Y - 6);
+    for (let x = 0; x < CANVAS_W; x += 10) wctx.fillRect(x, GROUND_Y + 2, 5, 2);
+
+    // Platforms: a lighter pixel top edge + a darker underside, so
+    // they read as solid blocks rather than flat rectangles.
+    const platTop = dark ? '#6a5636' : '#8a7046';
+    const platUnder = dark ? '#241b11' : '#3a2c18';
+    ORB_SURFACES.forEach(plat => {
+      wctx.fillStyle = platTop;
+      wctx.fillRect(plat.x, plat.y, plat.w, 3);
+      wctx.fillStyle = groundTop;
+      wctx.fillRect(plat.x, plat.y + 3, plat.w, plat.h - 5);
+      wctx.fillStyle = platUnder;
+      wctx.fillRect(plat.x, plat.y + plat.h - 2, plat.w, 2);
+    });
+  }
+
   // ---------------------------------------------------------------------
-  // Listeners (bound once per module load, guarded; battle state itself
-  // decides whether to react)
+  // Listeners
   // ---------------------------------------------------------------------
-  // Press-and-hold on-screen button, built on Pointer Events so mouse,
-  // touch, and pen all work identically (the original touchstart/
-  // touchend-only wiring was the bug: a mouse press fires no touch
-  // events at all, so clicking/holding these buttons with a mouse did
-  // nothing). Each button tracks its OWN pointer id via
-  // setPointerCapture, so holding left + jump with two different
-  // pointers (two fingers, or a finger and a mouse) works at once —
-  // one button's up/cancel can never release a DIFFERENT button's press.
   function bindPressHoldButton(button, onPress, onRelease) {
     let activePointerId = null;
     button.addEventListener('pointerdown', e => {
       e.preventDefault();
-      if (activePointerId !== null) return; // already held by another pointer
+      if (activePointerId !== null) return;
       activePointerId = e.pointerId;
       try { button.setPointerCapture(e.pointerId); } catch (err) { /* unsupported — still works without capture */ }
       onPress();
@@ -208,17 +264,11 @@
       activePointerId = null;
       try { button.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
       onRelease();
-      // Blur immediately — otherwise the button stays focused and a
-      // later Space press (jump) also re-triggers it as a native button
-      // activation, fighting with the actual jump input.
       button.blur();
     }
     button.addEventListener('pointerup', release);
     button.addEventListener('pointercancel', release);
     button.addEventListener('contextmenu', e => e.preventDefault());
-    // Pointer Events already cover activation; block the synthetic
-    // click that follows a touch tap so it can't re-focus/activate the
-    // button a second time.
     button.addEventListener('click', e => e.preventDefault());
   }
 
@@ -256,12 +306,6 @@
     listenersBound = false;
   }
 
-  // Scales battle-canvas's CSS size to the largest whole-number multiple
-  // of 320x180 that fits inside .battle-stage below the HUD row, so
-  // every pixel stays crisp; falls back to a fractional (non-integer)
-  // fit only when even 1x doesn't fit (very small/short viewports).
-  // Recomputed on resize, orientation change, and entering/leaving
-  // fullscreen — never assumed from a single measurement at battle start.
   function computeStageScale() {
     if (!el.stage) return;
     const availW = el.stage.clientWidth;
@@ -293,10 +337,7 @@
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   }
 
-  function onVisibilityChange() {
-    // Pausing the rAF loop itself (not just skipping updates) is handled
-    // in the loop via document.hidden; nothing else needed here.
-  }
+  function onVisibilityChange() { /* loop checks document.hidden itself */ }
 
   function isTypingTarget(e) {
     const t = e.target;
@@ -307,9 +348,6 @@
 
   function onKeyDown(e) {
     if (!S || isTypingTarget(e)) return;
-    // The page must never scroll out from under a battle, in any phase —
-    // these keys all drive the game (movement, jump, question nav) or do
-    // nothing, never the browser's own scroll behavior.
     if (SCROLL_KEYS.has(e.key)) e.preventDefault();
 
     if (S.phase === 'question') { handleQuestionKey(e); return; }
@@ -400,7 +438,7 @@
   function enterPlaying() {
     S.phase = 'playing';
     S.nextOrbAt = S.simTime + rand(ORB_MIN_MS, ORB_MAX_MS);
-    S.nextProjectileAt = S.simTime + rand(PROJ_MIN_MS, PROJ_MAX_MS);
+    S.nextAttackAt = S.simTime + rand.apply(null, ATTACKS.ATTACK_INTERVAL_MS[S.attackPattern]);
   }
 
   // ---------------------------------------------------------------------
@@ -409,9 +447,12 @@
   function update(dt) {
     S.simTime += dt;
     updatePlayer(dt);
+    updateNovaAnim();
     updateProjectiles(dt);
     updateOrb(dt);
-    maybeSpawnProjectile();
+    updateAttackState(dt);
+    updateParticles(dt);
+    S.bossBobPhase += dt * 0.003;
   }
 
   function updatePlayer(dt) {
@@ -424,7 +465,6 @@
     p.x = clamp(p.x + p.vx, 4, CANVAS_W - PLAYER_SIZE - 4);
     p.y += p.vy;
 
-    const wasOnGround = p.onGround;
     p.onGround = false;
     const feetY = p.y + PLAYER_SIZE;
     for (const surf of SURFACES) {
@@ -451,24 +491,100 @@
     if (p.invulnUntil && S.simTime > p.invulnUntil) p.invulnUntil = 0;
   }
 
-  function maybeSpawnProjectile() {
-    if (S.simTime < S.nextProjectileAt) return;
-    if (S.projectiles.length < MAX_PROJECTILES) {
-      const danger = (HP_SEGMENTS - S.bossHp) / HP_SEGMENTS; // 0..1, more variety as HP drops
-      const isLow = Math.random() < 0.5;
-      const speed = rand(0.8, 1.4) + danger * 0.6;
-      S.projectiles.push({
-        low: isLow,
-        x: BOSS_POS.x,
-        y: isLow ? GROUND_Y - 8 : GROUND_Y - PLAYER_SIZE - 12,
-        w: 8, h: 8,
-        vx: -speed,
-        bobBase: isLow ? GROUND_Y - 8 : null,
-        age: 0
-      });
+  // Idle/run/jump/fall — picked from physical state, not a separate
+  // input-driven state machine, so it can never drift from what the
+  // player is actually doing.
+  function updateNovaAnim() {
+    const p = S.player;
+    let anim;
+    if (!p.onGround) anim = p.vy < 0 ? 'jump' : 'fall';
+    else if (p.vx !== 0) anim = 'run';
+    else anim = 'idle';
+
+    if (anim !== S.novaAnim) { S.novaAnim = anim; S.novaFrameTimer = 0; }
+    S.novaFrameTimer += STEP_MS;
+    if (anim === 'run' && S.novaFrameTimer > 90) {
+      S.novaFrameTimer = 0;
+      S.novaRunFrame = (S.novaRunFrame + 1) % 3;
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Boss attacks — telegraphed (wind-up + a ground marker for low
+  // shots), phase-dependent (single/double/arc by HP, derived from
+  // battle-attacks.js), with a hop to the alternate boss spot whenever
+  // the phase changes.
+  // ---------------------------------------------------------------------
+  function updateAttackState(dt) {
+    const newPattern = ATTACKS.phaseForHp(S.bossHp);
+    if (newPattern !== S.attackPattern) {
+      S.attackPattern = newPattern;
+      S.bossPosIndex = S.bossPosIndex === 0 ? 1 : 0; // hop to the other spot
+    }
+
+    if (S.attackState === 'idle') {
+      if (S.simTime >= S.nextAttackAt) beginWindup();
+      return;
+    }
+    if (S.attackState === 'windup') {
+      if (S.simTime >= S.windupUntil) beginFiring();
+      return;
+    }
+    if (S.attackState === 'firing') {
+      for (let i = S.pendingShots.length - 1; i >= 0; i--) {
+        const shot = S.pendingShots[i];
+        if (S.simTime >= shot.fireAt) {
+          fireProjectile(shot.low);
+          S.pendingShots.splice(i, 1);
+        }
+      }
+      if (S.pendingShots.length === 0) {
+        S.attackState = 'idle';
+        S.warningMarkerX = null;
+        S.nextAttackAt = S.simTime + rand.apply(null, ATTACKS.ATTACK_INTERVAL_MS[S.attackPattern]);
+      }
+    }
+  }
+
+  function beginWindup() {
+    S.attackState = 'windup';
+    S.windupUntil = S.simTime + ATTACKS.WINDUP_MS;
+
+    const sub = ATTACKS.SUB_INTERVAL_MS;
+    let shots;
+    if (S.attackPattern === 'single') {
+      shots = [{ low: Math.random() < 0.5, fireAt: 0 }];
+    } else if (S.attackPattern === 'double') {
+      const low = Math.random() < 0.5;
+      shots = [{ low, fireAt: 0 }, { low, fireAt: sub }];
+    } else { // arc: low/high/low — same-type (low) spacing is 2 sub-intervals
+      shots = [{ low: true, fireAt: 0 }, { low: false, fireAt: sub }, { low: true, fireAt: sub * 2 }];
+    }
+    S.pendingShots = shots.map(s => ({ low: s.low, fireAt: S.windupUntil + s.fireAt }));
+    S.warningMarkerX = shots.some(s => s.low) ? bossPos().x : null;
+  }
+
+  function beginFiring() {
+    S.attackState = 'firing';
+  }
+
+  function bossPos() { return BOSS_POSITIONS[S.bossPosIndex]; }
+
+  function fireProjectile(isLow) {
+    if (S.projectiles.length >= MAX_PROJECTILES) return;
     const danger = (HP_SEGMENTS - S.bossHp) / HP_SEGMENTS;
-    S.nextProjectileAt = S.simTime + rand(PROJ_MIN_MS, PROJ_MAX_MS) * (1 - danger * 0.3);
+    const speed = rand(0.8, 1.4) + danger * 0.6;
+    const boss = bossPos();
+    S.projectiles.push({
+      low: isLow,
+      x: boss.x,
+      y: isLow ? GROUND_Y - 8 : GROUND_Y - PLAYER_SIZE - 12,
+      w: 8, h: 8,
+      vx: -speed,
+      bobBase: isLow ? GROUND_Y - 8 : null,
+      age: 0,
+      spin: 0
+    });
   }
 
   function updateProjectiles(dt) {
@@ -476,6 +592,7 @@
       const proj = S.projectiles[i];
       proj.x += proj.vx;
       proj.age += dt;
+      proj.spin += dt * 0.006; // rolling ones roll, flying ones spin
       if (proj.low) proj.y = proj.bobBase - Math.abs(Math.sin(proj.age * 0.006)) * 6;
       if (proj.x < -12) { S.projectiles.splice(i, 1); continue; }
 
@@ -489,6 +606,16 @@
     }
   }
 
+  // Caps flashes to MAX_FLASHES_PER_SEC regardless of how many hit/fizzle
+  // events happen close together — avoids any strobing effect.
+  function canFlashNow() {
+    const now = Date.now();
+    S.flashTimestamps = S.flashTimestamps.filter(t => now - t < 1000);
+    if (S.flashTimestamps.length >= MAX_FLASHES_PER_SEC) return false;
+    S.flashTimestamps.push(now);
+    return true;
+  }
+
   function triggerHit() {
     const p = S.player;
     if (p.invulnUntil > S.simTime) return;
@@ -497,6 +624,8 @@
     p.vx = 0;
     p.vy = -2.5;
     p.x = clamp(p.x - p.facing * 10, 4, CANVAS_W - PLAYER_SIZE - 4);
+    if (!reduceMotion && canFlashNow()) S.shakeUntil = S.simTime + 150;
+    spawnParticles(p.x + PLAYER_SIZE / 2, p.y + PLAYER_SIZE / 2, '#e8453a', 6);
     if (callbacks.sounds && callbacks.sounds.hit) callbacks.sounds.hit();
   }
 
@@ -506,6 +635,7 @@
       return;
     }
     S.orb.bobPhase += dt * 0.004;
+    S.orbPulse += dt * 0.006;
     const p = S.player;
     if (rectsOverlap(
       { x: p.x, y: p.y, w: PLAYER_SIZE, h: PLAYER_SIZE },
@@ -517,9 +647,31 @@
   }
 
   function spawnOrb() {
-    const platforms = ORB_SURFACES;
-    const platform = platforms[Math.floor(Math.random() * platforms.length)];
+    const platform = ORB_SURFACES[Math.floor(Math.random() * ORB_SURFACES.length)];
     S.orb = { x: platform.x + platform.w / 2, y: platform.y - 10, bobPhase: 0 };
+  }
+
+  function updateParticles(dt) {
+    for (let i = S.particles.length - 1; i >= 0; i--) {
+      const particle = S.particles[i];
+      particle.life -= dt;
+      if (particle.life <= 0) { S.particles.splice(i, 1); continue; }
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      particle.vy += 0.1;
+    }
+  }
+  function spawnParticles(x, y, color, count) {
+    if (reduceMotion) return;
+    const room = MAX_PARTICLES - S.particles.length;
+    const n = Math.max(0, Math.min(count, room));
+    for (let i = 0; i < n; i++) {
+      S.particles.push({
+        x, y, color,
+        vx: rand(-1.6, 1.6), vy: rand(-2.2, -0.4),
+        life: rand(250, 450)
+      });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -527,7 +679,7 @@
   // ---------------------------------------------------------------------
   function openQuestion() {
     S.phase = 'question';
-    S.paused = false; // phase check alone already stops updates; paused is for the explicit pause menu
+    S.paused = false;
     S.selectedOption = null;
     const q = S.questions[S.questionIndex];
 
@@ -571,7 +723,7 @@
   }
 
   async function confirmAnswer(optionIndex) {
-    if (S.selectedOption !== null) return; // already submitting this question
+    if (S.selectedOption !== null) return;
     S.selectedOption = optionIndex;
     el.questionOptions.querySelectorAll('.ob-option').forEach(b => { b.disabled = true; });
 
@@ -596,7 +748,6 @@
     S.recordedAnswers.push({ questionId: q.id, selectedIndex: optionIndex });
     if (correct) S.correctCount++;
 
-    // Feedback is never color-only: text + icon on the chosen button.
     const chosenBtn = el.questionOptions.querySelector(`[data-option-index="${optionIndex}"]`);
     if (chosenBtn) chosenBtn.textContent += correct ? '  ✓' : '  ✗';
     el.feedback.textContent = correct ? 'Correct!' : 'Not quite.';
@@ -656,12 +807,12 @@
     setTimeout(() => { if (el.banner.textContent === text) el.banner.hidden = true; }, ms);
   }
 
-  // Short, real-time (not sim-time) cosmetic animations — simple enough
-  // not to need routing through the fixed-step loop.
+  // Short, real-time (not sim-time) cosmetic animations.
   function fireChargedShot(done) {
     if (reduceMotion) { done(); return; }
     const startX = S.player.x + PLAYER_SIZE / 2, startY = S.player.y + PLAYER_SIZE / 2;
-    const endX = BOSS_POS.x + BOSS_POS.w / 2, endY = BOSS_POS.y + BOSS_POS.h / 2;
+    const boss = bossPos();
+    const endX = boss.x + boss.w / 2, endY = boss.y + boss.h / 2;
     const shot = { x: startX, y: startY };
     S.shots.push(shot);
     const t0 = performance.now();
@@ -674,7 +825,8 @@
       if (t < 1) requestAnimationFrame(step);
       else {
         S.shots.splice(S.shots.indexOf(shot), 1);
-        S.bossFlashUntil = performance.now() + 180;
+        if (canFlashNow()) S.bossFlashUntil = performance.now() + 180;
+        spawnParticles(endX, endY, '#ffe66d', 8);
         render();
         done();
       }
@@ -703,7 +855,7 @@
       if (!res.ok) throw new Error(result.error || 'Could not grade the battle.');
     } catch (err) {
       showBanner(err.message || 'Could not reach the server.', 2000);
-      setTimeout(() => finishBattle(), 1500); // retry — the session is still ungraded, safe to retry
+      setTimeout(() => finishBattle(), 1500);
       return;
     }
 
@@ -715,7 +867,20 @@
         S.bossHp = 0;
         renderHpBar();
       }
+      // Defeat: a flicker (a couple of flash toggles, rate-capped same as
+      // everything else), a particle burst, then confetti.
+      S.defeated = true;
+      if (!reduceMotion) {
+        for (let i = 0; i < 2; i++) {
+          if (canFlashNow()) { S.bossFlashUntil = performance.now() + 120; render(); await sleep(120); }
+          render(); await sleep(120);
+        }
+        const boss2 = bossPos();
+        spawnParticles(boss2.x + boss2.w / 2, boss2.y + boss2.h / 2, '#ffd34d', 20);
+        render();
+      }
       showBanner(boss ? boss.defeatedLine : 'Chapter cleared!', 1600);
+      if (callbacks.confetti) callbacks.confetti();
       await sleep(reduceMotion ? 200 : 1600);
     } else {
       showBanner(boss ? `${boss.defeatPlayerLine} (HP ${S.bossHp}/${HP_SEGMENTS})` : `Not quite — HP ${S.bossHp}/${HP_SEGMENTS}`, 1800);
@@ -733,58 +898,101 @@
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   // ---------------------------------------------------------------------
-  // Rendering — low internal resolution, scaled up via CSS
-  // image-rendering:pixelated. Solid-color placeholder shapes (Stage 1).
+  // Rendering — pre-rendered sprites only (battle-sprites.js), drawImage
+  // at draw time; no per-frame shape math or allocation. Subtle shake
+  // only (prefers-reduced-motion disables it entirely), flashes capped
+  // at MAX_FLASHES_PER_SEC.
   // ---------------------------------------------------------------------
   function render() {
     if (!S || !ctx) return;
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.fillStyle = '#12121f';
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ensureWorldCanvas();
 
-    // surfaces
-    ctx.fillStyle = '#5a4328';
-    for (const s of SURFACES) ctx.fillRect(s.x, s.y, s.w, s.h);
-
-    // boss
-    const boss = BOSS_POS;
-    const flashing = S.bossFlashUntil && performance.now() < S.bossFlashUntil;
-    ctx.fillStyle = S.bossHp <= 0 ? '#555' : (flashing ? '#ffffff' : '#d8362a');
-    ctx.fillRect(boss.x, boss.y, boss.w, boss.h);
-
-    // orb
-    if (S.orb) {
-      const bob = Math.sin(S.orb.bobPhase) * 3;
-      ctx.fillStyle = '#ffd34d';
-      ctx.fillRect(S.orb.x - 5, S.orb.y - 5 + bob, 10, 10);
+    ctx.save();
+    if (!reduceMotion && S.shakeUntil > performance.now()) {
+      ctx.translate(rand(-2, 2), rand(-2, 2));
     }
 
-    // fizzle flash at last orb spot isn't tracked post-collection; show a
-    // simple full-arena tint instead, very briefly.
+    ctx.clearRect(-4, -4, CANVAS_W + 8, CANVAS_H + 8);
+    ctx.drawImage(worldCanvas, 0, 0);
+
+    const sprites = S.sprites;
+    const boss = bossPos();
+    const bobY = reduceMotion ? 0 : Math.round(Math.sin(S.bossBobPhase) * 2);
+
+    // warning marker for an incoming low attack
+    if (S.warningMarkerX !== null && S.attackState === 'windup') {
+      ctx.fillStyle = 'rgba(255,214,77,0.6)';
+      ctx.fillRect(S.warningMarkerX - 4, GROUND_Y - 2, 8, 2);
+    }
+
+    // boss
+    if (S.bossHp <= 0 || S.defeated) {
+      ctx.drawImage(sprites.boss(S.bossData.sprite).defeated, boss.x, boss.y + boss.h / 2, boss.w, boss.h / 2);
+    } else {
+      const flashing = S.bossFlashUntil && performance.now() < S.bossFlashUntil;
+      let frame;
+      if (S.attackState === 'windup' || S.attackState === 'firing') frame = sprites.boss(S.bossData.sprite).attack;
+      else frame = sprites.boss(S.bossData.sprite).idle[Math.floor(S.bossBobPhase) % 2 === 0 ? 0 : 1];
+      ctx.drawImage(frame, boss.x, boss.y + bobY, boss.w, boss.h);
+      if (flashing) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillRect(boss.x, boss.y + bobY, boss.w, boss.h);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+
+    // orb (pulse)
+    if (S.orb) {
+      const bob = Math.sin(S.orb.bobPhase) * 3;
+      const pulse = reduceMotion ? 1 : 1 + Math.sin(S.orbPulse) * 0.12;
+      const size = 12 * pulse;
+      ctx.drawImage(sprites.orb, S.orb.x - size / 2, S.orb.y - size / 2 + bob, size, size);
+    }
+
     if (S.fizzleUntil && performance.now() < S.fizzleUntil) {
       ctx.fillStyle = 'rgba(120,120,130,0.25)';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
 
-    // projectiles
-    ctx.fillStyle = '#9b59b6';
-    for (const p of S.projectiles) ctx.fillRect(p.x, p.y, p.w, p.h);
+    // projectiles — themed glyph, spinning/bobbing
+    S.projectiles.forEach(p => {
+      const sprite = sprites.glyph(S.chapterId, p.low ? 'rolling' : 'flying');
+      ctx.save();
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(p.spin);
+      ctx.drawImage(sprite, -p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    });
 
     // charged shots
-    ctx.fillStyle = '#ffe66d';
-    for (const s of S.shots) ctx.fillRect(s.x - 3, s.y - 3, 6, 6);
+    S.shots.forEach(s => ctx.drawImage(sprites.shot, s.x - 5, s.y - 5, 10, 10));
+
+    // particles (hit/impact/defeat bursts)
+    S.particles.forEach(particle => {
+      ctx.globalAlpha = Math.max(0, particle.life / 400);
+      ctx.fillStyle = particle.color;
+      ctx.fillRect(particle.x - 1, particle.y - 1, 2, 2);
+      ctx.globalAlpha = 1;
+    });
 
     // player (blinks while invulnerable)
     const p = S.player;
     const blinking = p.invulnUntil > S.simTime && Math.floor(performance.now() / 90) % 2 === 0;
-    if (!blinking) drawNova(p.x, p.y, 2);
-  }
-
-  function drawNova(px, py, scale) {
-    for (const [x, y, w, h, dark] of NOVA_PIXELS) {
-      ctx.fillStyle = dark ? NOVA_DARK : NOVA_CREAM;
-      ctx.fillRect(px + x * scale, py + y * scale, w * scale, h * scale);
+    if (!blinking) {
+      let frame;
+      if (p.invulnUntil > S.simTime) frame = sprites.nova.hurt;
+      else if (S.novaAnim === 'jump') frame = sprites.nova.jump;
+      else if (S.novaAnim === 'fall') frame = sprites.nova.fall;
+      else if (S.novaAnim === 'run') frame = sprites.nova.run[S.novaRunFrame];
+      else frame = sprites.nova.idle[Math.floor(S.simTime / 500) % 2];
+      ctx.save();
+      if (p.facing < 0) { ctx.translate(p.x + PLAYER_SIZE, p.y); ctx.scale(-1, 1); ctx.drawImage(frame, 0, 0, PLAYER_SIZE, PLAYER_SIZE); }
+      else { ctx.drawImage(frame, p.x, p.y, PLAYER_SIZE, PLAYER_SIZE); }
+      ctx.restore();
     }
+
+    ctx.restore();
   }
 
   window.BossBattle = { start, destroy };

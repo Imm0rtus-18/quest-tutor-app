@@ -1,11 +1,14 @@
-// Proves every platform (and therefore every orb spawn point — orbs only
-// ever spawn on a platform surface) is reachable from the surface below
-// it with at least a 20% jump-capability margin, using the exact same
-// physics step function and arena layout the real game uses — not
-// numbers picked by eye. Run with:
+// Proves (1) every platform (and therefore every orb spawn point — orbs
+// only ever spawn on a platform surface) is reachable from the surface
+// below it with at least a 20% jump-capability margin, and (2) every
+// attack pattern's same-dodge-type projectile spacing leaves enough time
+// for a full jump, with margin — using the exact same physics step
+// function, arena layout, and attack-pattern data the real game uses,
+// not numbers picked by eye. Run with:
 //   node scripts/test-battle-reachability.js
 const physics = require('../public/battle-physics.js');
 const arena = require('../public/battle-arena.js');
+const attacks = require('../public/battle-attacks.js');
 
 const MARGIN = 0.2;
 let allPassed = true;
@@ -48,6 +51,18 @@ check('platform A -> platform B (higher)', platforms[0], platforms[1]);
 platforms.forEach((plat, i) => {
   const spawnX = plat.x + plat.w / 2;
   console.log(`\norb spawn point on platform ${i === 0 ? 'A' : 'B'}: x=${spawnX}, y=${plat.y - 10} — reachable because the platform itself is (checked above).`);
+});
+
+console.log('\n=== Projectile spacing checks (same-dodge-type gap vs. jump airtime) ===');
+const safeSpacing = attacks.minSafeSpacingMs(airtime);
+console.log(`jump airtime=${airtime.toFixed(1)}ms, required safety margin=${(attacks.SAFETY_MARGIN * 100).toFixed(0)}%, minimum safe spacing=${safeSpacing.toFixed(1)}ms`);
+Object.keys(attacks.SAME_TYPE_SPACING_MS).forEach(pattern => {
+  const spacing = attacks.SAME_TYPE_SPACING_MS[pattern];
+  const ok = attacks.isPatternSafe(pattern, airtime);
+  const spacingLabel = Number.isFinite(spacing) ? spacing + 'ms' : 'n/a (single shot)';
+  const marginPct = Number.isFinite(spacing) ? ((spacing / safeSpacing - 1) * 100).toFixed(1) + '%' : 'n/a';
+  console.log(`${pattern}: same-type spacing=${spacingLabel}, margin over minimum=${marginPct} -> ${ok ? 'SAFE' : 'UNSAFE'}`);
+  if (!ok) allPassed = false;
 });
 
 console.log('\n' + (allPassed ? 'ALL REACHABILITY CHECKS PASSED' : 'REACHABILITY CHECK FAILED'));

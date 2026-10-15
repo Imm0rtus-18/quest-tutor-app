@@ -22,6 +22,8 @@
 <script src="worldMap.js"></script>
 <script src="battle-physics.js"></script>
 <script src="battle-arena.js"></script>
+<script src="battle-attacks.js"></script>
+<script src="battle-sprites.js"></script>
 <script src="battle.js"></script>
 <style>
   :root{
@@ -2019,6 +2021,7 @@ function offerBattleOrClassic(adj) {
       correct: () => playReplyTone(),
       wrong: () => playTone(140, 0, 0.12, 0.04)
     },
+    confetti: () => spawnConfetti(document.getElementById('battleStage')),
     onSwitchToClassic: partial => enterQuizMode(adj, partial),
     onComplete: result => exitQuizMode(result)
   });

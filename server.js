@@ -1419,6 +1419,112 @@ app.get('/parent', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'parent.html'));
 });
 
+// ───────────────────────────────────────────────────────────────────
+// Boss battle sprite preview — login-required, unlinked from anywhere
+// in the app, for one-screenshot review of the pixel art. Reads only
+// bosses.js's existing {id,name,sprite} data and battle-sprites.js's
+// client-side rendering; touches no quiz-grading or answer-checking
+// code.
+app.get('/sprites', requireAuth, (req, res) => {
+  const bossList = Object.values(BOSSES).map(b => ({ id: b.id, name: b.name, sprite: b.sprite }));
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Battle sprite preview</title>
+<style>
+  body { background: #12121f; color: #eee; font-family: system-ui, sans-serif; padding: 24px; }
+  h1 { font-size: 18px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 20px; }
+  .card { background: #1b1b30; border-radius: 8px; padding: 12px; text-align: center; }
+  .card canvas { image-rendering: pixelated; display: block; margin: 0 auto 6px; }
+  .label { font-size: 12px; color: #bbb; }
+  .frames { display: flex; gap: 8px; justify-content: center; }
+</style>
+</head>
+<body>
+<h1>Boss battle sprite preview (4x)</h1>
+<h2>Bosses</h2>
+<div class="grid" id="bossGrid"></div>
+<h2>Nova</h2>
+<div class="grid" id="novaGrid"></div>
+<h2>Projectile glyphs</h2>
+<div class="grid" id="glyphGrid"></div>
+<h2>Orb &amp; shot</h2>
+<div class="grid" id="orbGrid"></div>
+
+<script src="/battle-sprites.js"></script>
+<script>
+  const BOSS_LIST = ${JSON.stringify(bossList)};
+  const SCALE = 4;
+  function mount(container, canvas, label) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    canvas.style.width = (canvas.width * SCALE) + 'px';
+    canvas.style.height = (canvas.height * SCALE) + 'px';
+    card.appendChild(canvas);
+    const labelEl = document.createElement('div');
+    labelEl.className = 'label';
+    labelEl.textContent = label;
+    card.appendChild(labelEl);
+    container.appendChild(card);
+  }
+
+  const sprites = window.BattleSprites.buildAll();
+
+  const bossGrid = document.getElementById('bossGrid');
+  BOSS_LIST.forEach(boss => {
+    const set = sprites.boss(boss.sprite);
+    const card = document.createElement('div');
+    card.className = 'card';
+    const framesWrap = document.createElement('div');
+    framesWrap.className = 'frames';
+    [['idle0', set.idle[0]], ['idle1', set.idle[1]], ['attack', set.attack], ['hurt', set.hurt], ['defeated', set.defeated]]
+      .forEach(([name, canvas]) => {
+        const wrap = document.createElement('div');
+        canvas.style.width = (canvas.width * SCALE) + 'px';
+        canvas.style.height = (canvas.height * SCALE) + 'px';
+        canvas.style.imageRendering = 'pixelated';
+        wrap.appendChild(canvas);
+        const tag = document.createElement('div');
+        tag.className = 'label';
+        tag.textContent = name;
+        wrap.appendChild(tag);
+        framesWrap.appendChild(wrap);
+      });
+    card.appendChild(framesWrap);
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = boss.name + ' (' + boss.sprite.base + ')';
+    card.appendChild(label);
+    bossGrid.appendChild(card);
+  });
+
+  const novaGrid = document.getElementById('novaGrid');
+  const nova = sprites.nova;
+  [['idle0', nova.idle[0]], ['idle1', nova.idle[1]], ['run0', nova.run[0]], ['run1', nova.run[1]], ['run2', nova.run[2]], ['jump', nova.jump], ['fall', nova.fall], ['hurt', nova.hurt]]
+    .forEach(([name, canvas]) => mount(novaGrid, canvas, name));
+
+  const glyphGrid = document.getElementById('glyphGrid');
+  const seenGlyphs = new Set();
+  BOSS_LIST.forEach(boss => {
+    ['rolling', 'flying'].forEach(variant => {
+      const canvas = sprites.glyph(boss.id, variant);
+      const key = boss.id + '|' + variant;
+      if (seenGlyphs.has(key)) return;
+      seenGlyphs.add(key);
+      mount(glyphGrid, canvas, boss.id + ' / ' + variant);
+    });
+  });
+
+  const orbGrid = document.getElementById('orbGrid');
+  mount(orbGrid, sprites.orb, 'orb');
+  mount(orbGrid, sprites.shot, 'shot');
+</script>
+</body>
+</html>`);
+});
+
 app.get('/api/parent/pending', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(

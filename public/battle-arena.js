@@ -24,9 +24,13 @@
   ];
   const ORB_SURFACES = SURFACES.filter(s => s.kind === 'platform');
   const BOSS_POS = { x: 266, y: GROUND_Y - 40, w: 36, h: 40 };
+  // The boss hops to this second spot on a phase change (see
+  // battle-attacks.js) — same size/height, just further left, clear of
+  // both platforms' x-ranges so the hop never blocks a jump.
+  const BOSS_POS_ALT = { x: 206, y: GROUND_Y - 40, w: 36, h: 40 };
   const PLAYER_START = { x: 24, y: GROUND_Y - 16 };
 
-  const ARENA = { GROUND_Y, SURFACES, ORB_SURFACES, BOSS_POS, PLAYER_START };
+  const ARENA = { GROUND_Y, SURFACES, ORB_SURFACES, BOSS_POS, BOSS_POS_ALT, PLAYER_START };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = ARENA;

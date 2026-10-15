@@ -1,12 +1,17 @@
-// Boss fight flavor text — one original boss per Algebra 1 chapter, keyed
-// to curriculum.js's chapter ids exactly. Text only: no art, no LLM calls
-// during battle (fixed lines, instant, zero quota cost). All names/lines
-// are original creations for this app, not references to any existing
-// game or franchise.
+// Boss fight flavor text + sprite descriptor — one original boss per
+// Algebra 1 chapter, keyed to curriculum.js's chapter ids exactly.
+// Text/names are original creations for this app, not references to any
+// existing game or franchise. `sprite` says which of the 4 original base
+// designs (battle-sprites.js: golem/owl/crab/jelly) this boss uses, with
+// its own hue (0-359, drives that base's whole palette) and accessory
+// (a named prop battle-sprites.js knows how to draw for that base) so
+// all 12 look distinct despite sharing a base silhouette. No LLM calls
+// during battle: all lines are fixed, instant, zero quota cost.
 const BOSSES = {
   'algebra1-01': {
     id: 'algebra1-01',
     name: 'The Order Keeper',
+    sprite: { base: 'golem', hue: 28, accessory: 'tablet' },
     taunts: [
       "Parentheses first. ALWAYS parentheses first.",
       "You call that an order of operations?"
@@ -18,6 +23,7 @@ const BOSSES = {
   'algebra1-02': {
     id: 'algebra1-02',
     name: 'The Sign Flipper',
+    sprite: { base: 'owl', hue: 200, accessory: 'signCoin' },
     taunts: [
       "Negative vibes only down here.",
       "Distribute THIS."
@@ -29,6 +35,7 @@ const BOSSES = {
   'algebra1-03': {
     id: 'algebra1-03',
     name: 'Balance Baron',
+    sprite: { base: 'crab', hue: 48, accessory: 'scaleClaws' },
     taunts: [
       "Tip the scale and the whole equation falls!",
       "Isolate THIS, if you can."
@@ -40,6 +47,7 @@ const BOSSES = {
   'algebra1-04': {
     id: 'algebra1-04',
     name: 'Rise \'n Run',
+    sprite: { base: 'jelly', hue: 150, accessory: 'slopeAntenna' },
     taunts: [
       "Steep enough for you?",
       "Find MY slope. Go on."
@@ -51,6 +59,7 @@ const BOSSES = {
   'algebra1-05': {
     id: 'algebra1-05',
     name: 'The Perpendicular',
+    sprite: { base: 'golem', hue: 265, accessory: 'crossbar' },
     taunts: [
       "Our slopes will NEVER match.",
       "Negative reciprocal. Learn it."
@@ -62,6 +71,7 @@ const BOSSES = {
   'algebra1-06': {
     id: 'algebra1-06',
     name: 'Shady Character',
+    sprite: { base: 'owl', hue: 258, accessory: 'shadeCloak' },
     taunts: [
       "Everything below this line is MINE.",
       "Flip the sign and I get stronger!"
@@ -73,6 +83,7 @@ const BOSSES = {
   'algebra1-07': {
     id: 'algebra1-07',
     name: 'Eliminator X',
+    sprite: { base: 'crab', hue: 6, accessory: 'xClaws' },
     taunts: [
       "Two equations, zero chances for you.",
       "Substitute me? I dare you."
@@ -84,6 +95,7 @@ const BOSSES = {
   'algebra1-08': {
     id: 'algebra1-08',
     name: 'Captain Compound',
+    sprite: { base: 'jelly', hue: 320, accessory: 'growthSpikes' },
     taunts: [
       "I grow faster every single turn!",
       "Exponents only get BIGGER down here."
@@ -95,6 +107,7 @@ const BOSSES = {
   'algebra1-09': {
     id: 'algebra1-09',
     name: 'Parabolt',
+    sprite: { base: 'golem', hue: 190, accessory: 'boltCrown' },
     taunts: [
       "I open upward — straight into victory!",
       "Find my roots. I'll wait."
@@ -106,6 +119,7 @@ const BOSSES = {
   'algebra1-10': {
     id: 'algebra1-10',
     name: 'The Foilguard',
+    sprite: { base: 'owl', hue: 95, accessory: 'foilShield' },
     taunts: [
       "First, Outer, Inner, Last — all of them beat you!",
       "Try to factor THIS mess."
@@ -117,6 +131,7 @@ const BOSSES = {
   'algebra1-11': {
     id: 'algebra1-11',
     name: 'The Canceller',
+    sprite: { base: 'crab', hue: 170, accessory: 'cancelMark' },
     taunts: [
       "Cross-multiply if you dare!",
       "Watch your domain — or don't."
@@ -128,6 +143,7 @@ const BOSSES = {
   'algebra1-12': {
     id: 'algebra1-12',
     name: 'Hypotenu-Sir',
+    sprite: { base: 'jelly', hue: 42, accessory: 'triangleCrown' },
     taunts: [
       "a-squared plus b-squared equals MY WIN.",
       "Simplify that radical if you can!"
