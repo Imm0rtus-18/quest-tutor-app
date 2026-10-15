@@ -18,30 +18,35 @@
 (function () {
   'use strict';
 
-  const CANVAS_W = 320, CANVAS_H = 180;
-  const STEP_MS = 1000 / 60;
-  const GRAVITY = 0.62;
-  const MAX_FALL = 9;
-  const MOVE_SPEED = 1.5;
-  const JUMP_VELOCITY = -7.2;
-  const JUMP_CUT_MULT = 0.45;
-  const COYOTE_MS = 100;
-  const JUMP_BUFFER_MS = 100;
+  // Physics constants and the arena layout both come from their own
+  // dual-environment (browser + Node) modules now — battle-physics.js
+  // and battle-arena.js — so scripts/test-battle-reachability.js proves
+  // reachability against the exact same numbers the real game runs,
+  // never a hand-copied duplicate that could drift out of sync.
+  const PHYS = window.BattlePhysics.CONST;
+  const CANVAS_W = PHYS.CANVAS_W, CANVAS_H = PHYS.CANVAS_H;
+  const STEP_MS = PHYS.STEP_MS;
+  const GRAVITY = PHYS.GRAVITY;
+  const MAX_FALL = PHYS.MAX_FALL;
+  const MOVE_SPEED = PHYS.MOVE_SPEED;
+  const JUMP_VELOCITY = PHYS.JUMP_VELOCITY;
+  const JUMP_CUT_MULT = PHYS.JUMP_CUT_MULT;
+  const COYOTE_MS = PHYS.COYOTE_MS;
+  const JUMP_BUFFER_MS = PHYS.JUMP_BUFFER_MS;
+  const PLAYER_SIZE = PHYS.PLAYER_SIZE; // 8x8 sprite at 2x scale
+  const GROUND_Y = PHYS.GROUND_Y;
+
   const INVULN_MS = 1000;
   const MAX_PROJECTILES = 8;
   const PROJ_MIN_MS = 1200, PROJ_MAX_MS = 2000;
   const ORB_MIN_MS = 4000, ORB_MAX_MS = 7000;
-  const PLAYER_SIZE = 16; // 8x8 sprite at 2x scale
-  const GROUND_Y = 160;
   const HP_SEGMENTS = 10;
 
-  const SURFACES = [
-    { x: 0, y: GROUND_Y, w: CANVAS_W, h: 20 },
-    { x: 40, y: 122, w: 58, h: 8 },
-    { x: 182, y: 92, w: 58, h: 8 }
-  ];
-  const BOSS_POS = { x: 266, y: GROUND_Y - 40, w: 36, h: 40 };
-  const PLAYER_START = { x: 24, y: GROUND_Y - PLAYER_SIZE };
+  const ARENA = window.BattleArena;
+  const SURFACES = ARENA.SURFACES;
+  const ORB_SURFACES = ARENA.ORB_SURFACES;
+  const BOSS_POS = ARENA.BOSS_POS;
+  const PLAYER_START = ARENA.PLAYER_START;
 
   // Same 8x8 pixel pattern as the existing .nova-sprite SVG markup used
   // elsewhere in the app (chat header, auth screen) — reused here so the
@@ -69,17 +74,20 @@
   function cacheEls() {
     el = {
       overlay: document.getElementById('battleOverlay'),
-      shell: document.getElementById('battleShell'),
+      stageWrap: document.getElementById('battleStageWrap'),
       start: document.getElementById('battleStart'),
       bossNameStart: document.getElementById('battleBossNameStart'),
       chapterTitleStart: document.getElementById('battleChapterTitleStart'),
       fightBtn: document.getElementById('battleFightBtn'),
       classicBtn: document.getElementById('battleClassicBtn'),
       arena: document.getElementById('battleArena'),
+      hud: document.getElementById('battleHud'),
       bossNameHud: document.getElementById('battleBossNameHud'),
       hpBar: document.getElementById('battleHpBar'),
       tally: document.getElementById('battleTally'),
+      fullscreenBtn: document.getElementById('battleFullscreenBtn'),
       pauseBtn: document.getElementById('battlePauseBtn'),
+      stage: document.getElementById('battleStage'),
       canvas: document.getElementById('battleCanvas'),
       banner: document.getElementById('battleBanner'),
       touchControls: document.getElementById('battleTouchControls'),
@@ -168,6 +176,7 @@
 
   function destroy() {
     stopLoop();
+    exitFullscreenIfActive();
     el.overlay && el.overlay.classList.add('hidden');
     unbindListeners();
     S = null;
@@ -177,6 +186,42 @@
   // Listeners (bound once per module load, guarded; battle state itself
   // decides whether to react)
   // ---------------------------------------------------------------------
+  // Press-and-hold on-screen button, built on Pointer Events so mouse,
+  // touch, and pen all work identically (the original touchstart/
+  // touchend-only wiring was the bug: a mouse press fires no touch
+  // events at all, so clicking/holding these buttons with a mouse did
+  // nothing). Each button tracks its OWN pointer id via
+  // setPointerCapture, so holding left + jump with two different
+  // pointers (two fingers, or a finger and a mouse) works at once —
+  // one button's up/cancel can never release a DIFFERENT button's press.
+  function bindPressHoldButton(button, onPress, onRelease) {
+    let activePointerId = null;
+    button.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (activePointerId !== null) return; // already held by another pointer
+      activePointerId = e.pointerId;
+      try { button.setPointerCapture(e.pointerId); } catch (err) { /* unsupported — still works without capture */ }
+      onPress();
+    });
+    function release(e) {
+      if (e.pointerId !== activePointerId) return;
+      activePointerId = null;
+      try { button.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+      onRelease();
+      // Blur immediately — otherwise the button stays focused and a
+      // later Space press (jump) also re-triggers it as a native button
+      // activation, fighting with the actual jump input.
+      button.blur();
+    }
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('contextmenu', e => e.preventDefault());
+    // Pointer Events already cover activation; block the synthetic
+    // click that follows a touch tap so it can't re-focus/activate the
+    // button a second time.
+    button.addEventListener('click', e => e.preventDefault());
+  }
+
   function bindListeners() {
     if (listenersBound) return;
     listenersBound = true;
@@ -187,23 +232,65 @@
     el.resumeBtn.addEventListener('click', () => closePauseMenu());
     el.pauseClassicBtn.addEventListener('click', () => switchToClassic());
 
-    el.touchLeft.addEventListener('touchstart', e => { e.preventDefault(); if (S) S.keys.left = true; });
-    el.touchLeft.addEventListener('touchend', e => { e.preventDefault(); if (S) S.keys.left = false; });
-    el.touchRight.addEventListener('touchstart', e => { e.preventDefault(); if (S) S.keys.right = true; });
-    el.touchRight.addEventListener('touchend', e => { e.preventDefault(); if (S) S.keys.right = false; });
-    el.touchJump.addEventListener('touchstart', e => { e.preventDefault(); onJumpPressed(); });
-    el.touchJump.addEventListener('touchend', e => { e.preventDefault(); onJumpReleased(); });
+    bindPressHoldButton(el.touchLeft, () => { if (S) S.keys.left = true; }, () => { if (S) S.keys.left = false; });
+    bindPressHoldButton(el.touchRight, () => { if (S) S.keys.right = true; }, () => { if (S) S.keys.right = false; });
+    bindPressHoldButton(el.touchJump, onJumpPressed, onJumpReleased);
+
+    el.fullscreenBtn.addEventListener('click', toggleFullscreen);
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('resize', computeStageScale);
+    window.addEventListener('orientationchange', computeStageScale);
+    document.addEventListener('fullscreenchange', computeStageScale);
   }
 
   function unbindListeners() {
     document.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('keyup', onKeyUp);
     document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('resize', computeStageScale);
+    window.removeEventListener('orientationchange', computeStageScale);
+    document.removeEventListener('fullscreenchange', computeStageScale);
     listenersBound = false;
+  }
+
+  // Scales battle-canvas's CSS size to the largest whole-number multiple
+  // of 320x180 that fits inside .battle-stage below the HUD row, so
+  // every pixel stays crisp; falls back to a fractional (non-integer)
+  // fit only when even 1x doesn't fit (very small/short viewports).
+  // Recomputed on resize, orientation change, and entering/leaving
+  // fullscreen — never assumed from a single measurement at battle start.
+  function computeStageScale() {
+    if (!el.stage) return;
+    const availW = el.stage.clientWidth;
+    const availH = el.stage.clientHeight;
+    if (availW <= 0 || availH <= 0) return;
+
+    const integerScale = Math.floor(Math.min(availW / CANVAS_W, availH / CANVAS_H));
+    let cssW, cssH;
+    if (integerScale >= 1) {
+      cssW = CANVAS_W * integerScale;
+      cssH = CANVAS_H * integerScale;
+    } else {
+      const fitScale = Math.min(availW / CANVAS_W, availH / CANVAS_H);
+      cssW = CANVAS_W * fitScale;
+      cssH = CANVAS_H * fitScale;
+    }
+    el.canvas.style.width = cssW + 'px';
+    el.canvas.style.height = cssH + 'px';
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      if (el.stageWrap.requestFullscreen) el.stageWrap.requestFullscreen().catch(() => {});
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+  function exitFullscreenIfActive() {
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   }
 
   function onVisibilityChange() {
@@ -216,14 +303,22 @@
     return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
   }
 
+  const SCROLL_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ']);
+
   function onKeyDown(e) {
     if (!S || isTypingTarget(e)) return;
+    // The page must never scroll out from under a battle, in any phase —
+    // these keys all drive the game (movement, jump, question nav) or do
+    // nothing, never the browser's own scroll behavior.
+    if (SCROLL_KEYS.has(e.key)) e.preventDefault();
+
     if (S.phase === 'question') { handleQuestionKey(e); return; }
     if (S.phase !== 'playing') return;
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') S.keys.left = true;
     if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') S.keys.right = true;
-    if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { e.preventDefault(); onJumpPressed(); }
+    if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') onJumpPressed();
     if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') openPauseMenu();
+    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
   }
   function onKeyUp(e) {
     if (!S) return;
@@ -244,12 +339,14 @@
   function onFightClicked() {
     el.start.hidden = true;
     el.arena.hidden = false;
+    computeStageScale();
     enterPlaying();
     startLoop();
   }
 
   function switchToClassic() {
     stopLoop();
+    exitFullscreenIfActive();
     el.overlay.classList.add('hidden');
     const partial = { answeredSoFar: S ? S.recordedAnswers.slice() : [], nextIndex: S ? S.recordedAnswers.length : 0 };
     const cb = callbacks.onSwitchToClassic;
@@ -420,7 +517,7 @@
   }
 
   function spawnOrb() {
-    const platforms = SURFACES.slice(1); // not the ground
+    const platforms = ORB_SURFACES;
     const platform = platforms[Math.floor(Math.random() * platforms.length)];
     S.orb = { x: platform.x + platform.w / 2, y: platform.y - 10, bobPhase: 0 };
   }
@@ -625,6 +722,7 @@
       await sleep(reduceMotion ? 200 : 1800);
     }
 
+    exitFullscreenIfActive();
     el.overlay.classList.add('hidden');
     stopLoop();
     const onComplete = callbacks.onComplete;

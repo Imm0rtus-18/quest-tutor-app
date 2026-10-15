@@ -20,6 +20,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="mapData.js"></script>
 <script src="worldMap.js"></script>
+<script src="battle-physics.js"></script>
+<script src="battle-arena.js"></script>
 <script src="battle.js"></script>
 <style>
   :root{
@@ -741,45 +743,86 @@
   @keyframes km-drift{from{transform:translateX(0);}to{transform:translateX(2400px);}}
 
   /* ── Boss battle ──────────────────────────────────────────────────── */
-  .battle-shell{
-    background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
-    width:min(92vw,720px);max-height:92vh;overflow-y:auto;
-    padding:28px 26px;position:relative;
+  /* Full-viewport takeover — same treatment as .km-fullscreen / the
+     onboarding overlay, not a floating card. */
+  .battle-fullscreen{padding:0;}
+  .battle-stage-wrap{
+    width:100%;height:100%;display:flex;flex-direction:column;
+    background:var(--bg);position:relative;
+  }
+
+  .battle-start{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;
   }
   .battle-boss-name{
     font-family:var(--font-display);font-weight:400;font-size:16px;
     color:var(--accent);margin:0 0 8px;text-align:center;
   }
   .battle-start-sub{font-family:var(--font-body);color:var(--text-muted);text-align:center;margin:0 0 6px;}
-  .battle-start-hint{font-family:var(--font-body);font-size:13px;color:var(--text-muted);text-align:center;margin:0 0 22px;}
-  .battle-start-buttons{display:flex;flex-direction:column;gap:10px;}
+  .battle-start-hint{font-family:var(--font-body);font-size:13px;color:var(--text-muted);text-align:center;margin:0 0 22px;max-width:420px;}
+  .battle-start-buttons{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;}
 
-  .battle-hud{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
-  .battle-hud .battle-boss-name{margin:0;flex-shrink:0;text-align:left;}
-  .battle-hp-bar{display:flex;gap:2px;flex:1;min-width:140px;}
-  .battle-hp-segment{flex:1;height:14px;background:var(--bg-panel-alt);border:2px solid var(--border);}
+  /* Slim single-row HUD — never wraps, even at phone width: the boss
+     name/tally truncate with an ellipsis before the row would break. */
+  .battle-hud{
+    display:flex;align-items:center;gap:8px;flex-wrap:nowrap;flex-shrink:0;
+    padding:8px 10px;background:var(--bg-panel);border-bottom:3px solid var(--border);
+    overflow:hidden;
+  }
+  .battle-hud .battle-boss-name{
+    margin:0;flex:0 1 auto;min-width:0;text-align:left;font-size:12px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .battle-hp-bar{display:flex;gap:2px;flex:1 1 60px;min-width:50px;max-width:220px;}
+  .battle-hp-segment{flex:1;height:12px;background:var(--bg-panel-alt);border:2px solid var(--border);}
   .battle-hp-segment.filled{background:var(--accent);}
-  .battle-tally{font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin:0;white-space:nowrap;}
+  .battle-tally{
+    font-family:var(--font-body);font-size:11px;color:var(--text-muted);margin:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0;
+  }
+  .battle-hud-btn{margin-left:auto;flex-shrink:0;width:28px;height:28px;font-size:12px;}
+  .battle-hud-btn + .battle-hud-btn{margin-left:4px;}
 
-  .battle-canvas-wrap{position:relative;width:100%;background:#0a0a14;border:3px solid var(--border);}
+  /* The stage: battle.js sizes .battle-canvas to the largest whole-
+     number multiple of 320x180 that fits here (or a fractional fit on
+     very small screens), then centers it via this flex container. */
+  .battle-stage{
+    flex:1;min-height:0;position:relative;
+    display:flex;align-items:center;justify-content:center;
+    background:#0a0a14;overflow:hidden;
+  }
   .battle-canvas{
-    display:block;width:100%;aspect-ratio:320/180;
-    image-rendering:pixelated;image-rendering:crisp-edges;
+    display:block;image-rendering:pixelated;image-rendering:crisp-edges;
+    border:3px solid var(--border);
   }
   .battle-banner{
-    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    position:absolute;top:16px;left:50%;transform:translateX(-50%);
     margin:0;padding:8px 16px;background:var(--bg-panel);border:2px solid var(--border);
     font-family:var(--font-display);font-size:12px;color:var(--text);text-align:center;
-    box-shadow:var(--shadow-xs);
+    box-shadow:var(--shadow-xs);max-width:90%;z-index:2;
   }
-  .battle-touch-controls{display:flex;justify-content:space-between;gap:10px;margin-top:10px;}
-  .battle-touch-btn{
-    flex:1;padding:14px;font-size:18px;background:var(--bg-panel-alt);color:var(--text);
-    border:2px solid var(--border);cursor:pointer;box-shadow:var(--shadow-xs);
-    -webkit-user-select:none;user-select:none;touch-action:manipulation;
-  }
-  .battle-touch-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
 
+  /* Touch controls overlay the bottom corners of the stage itself. */
+  .battle-touch-controls{position:absolute;inset:auto 0 18px 0;display:flex;justify-content:space-between;padding:0 18px;pointer-events:none;z-index:2;}
+  .battle-touch-controls > *{pointer-events:auto;}
+  .battle-touch-left{margin-right:10px;}
+  .battle-touch-btn{
+    width:56px;height:56px;font-size:20px;background:rgba(0,0,0,0.35);color:#fff;
+    border:2px solid rgba(255,255,255,0.5);border-radius:50%;cursor:pointer;
+    -webkit-user-select:none;user-select:none;touch-action:none;
+    -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+  }
+  .battle-touch-btn:active{background:rgba(0,0,0,0.55);}
+
+  /* Question/pause overlays are centered over the stage specifically
+     (it's their positioned ancestor, not the viewport). */
+  .battle-question, .battle-pause{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:min(90%,480px);z-index:3;
+    background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
+    padding:22px;
+  }
   .battle-feedback{min-height:20px;font-family:var(--font-body);font-size:14px;margin:10px 0 0;color:var(--text);}
   .battle-pause{text-align:center;}
   .battle-pause .auth-submit, .battle-pause .ob-option{margin-top:10px;}
@@ -1102,8 +1145,12 @@
 <!-- ── Boss battle (chapter quiz, platformer mode) — Classic quiz in
      quizPanel is untouched and is always available as a fallback. All
      rendering/physics lives in battle.js; this is just the DOM shell. -->
-<div class="overlay-bg hidden" id="battleOverlay">
-  <div class="battle-shell" id="battleShell">
+<!-- Full-viewport takeover, same treatment as the Knowledge Map/onboarding
+     overlays — not a floating card. battle.js computes battleStage's
+     pixel size (largest whole-number multiple of 320x180 that fits
+     below the HUD row, or a fractional fit on very small screens). -->
+<div class="overlay-bg hidden battle-fullscreen" id="battleOverlay">
+  <div class="battle-stage-wrap" id="battleStageWrap">
 
     <div class="battle-start" id="battleStart">
       <p class="battle-boss-name" id="battleBossNameStart"></p>
@@ -1116,34 +1163,35 @@
     </div>
 
     <div class="battle-arena" id="battleArena" hidden>
-      <div class="battle-hud">
+      <div class="battle-hud" id="battleHud">
         <p class="battle-boss-name" id="battleBossNameHud"></p>
         <div class="battle-hp-bar" id="battleHpBar" aria-label="Boss HP" role="img"></div>
         <p class="battle-tally" id="battleTally">Power-ups 0 / 10 · Correct 0</p>
-        <button class="icon-toggle" id="battlePauseBtn" type="button" aria-label="Pause battle">⏸</button>
+        <button class="icon-toggle battle-hud-btn" id="battleFullscreenBtn" type="button" aria-label="Toggle fullscreen" title="Fullscreen (F)">⛶</button>
+        <button class="icon-toggle battle-hud-btn" id="battlePauseBtn" type="button" aria-label="Pause battle" title="Pause (Esc)">⏸</button>
       </div>
-      <div class="battle-canvas-wrap">
+      <div class="battle-stage" id="battleStage">
         <canvas class="battle-canvas" id="battleCanvas" width="320" height="180"></canvas>
         <p class="battle-banner" id="battleBanner" hidden aria-live="polite"></p>
-      </div>
-      <div class="battle-touch-controls" id="battleTouchControls" hidden>
-        <button class="battle-touch-btn" id="touchLeftBtn" type="button" aria-label="Move left">◀</button>
-        <button class="battle-touch-btn" id="touchJumpBtn" type="button" aria-label="Jump">▲</button>
-        <button class="battle-touch-btn" id="touchRightBtn" type="button" aria-label="Move right">▶</button>
-      </div>
-    </div>
+        <div class="battle-touch-controls" id="battleTouchControls" hidden>
+          <button class="battle-touch-btn battle-touch-left" id="touchLeftBtn" type="button" aria-label="Move left">◀</button>
+          <button class="battle-touch-btn battle-touch-right" id="touchRightBtn" type="button" aria-label="Move right">▶</button>
+          <button class="battle-touch-btn battle-touch-jump" id="touchJumpBtn" type="button" aria-label="Jump">▲</button>
+        </div>
 
-    <div class="battle-question" id="battleQuestionOverlay" hidden>
-      <p class="ob-level-label" id="battleQuestionChapter"></p>
-      <p class="ob-question" id="battleQuestionText"></p>
-      <div class="ob-options" id="battleQuestionOptions"></div>
-      <p class="battle-feedback" id="battleFeedback" aria-live="polite"></p>
-    </div>
-
-    <div class="battle-pause" id="battlePauseMenu" hidden>
-      <p class="placement-title">Paused</p>
-      <button class="auth-submit" id="battleResumeBtn" type="button">Resume</button>
-      <button class="ob-option" id="battlePauseClassicBtn" type="button">Switch to Classic quiz</button>
+        <!-- Centered over the stage specifically, not the whole viewport. -->
+        <div class="battle-question" id="battleQuestionOverlay" hidden>
+          <p class="ob-level-label" id="battleQuestionChapter"></p>
+          <p class="ob-question" id="battleQuestionText"></p>
+          <div class="ob-options" id="battleQuestionOptions"></div>
+          <p class="battle-feedback" id="battleFeedback" aria-live="polite"></p>
+        </div>
+        <div class="battle-pause" id="battlePauseMenu" hidden>
+          <p class="placement-title">Paused</p>
+          <button class="auth-submit" id="battleResumeBtn" type="button">Resume</button>
+          <button class="ob-option" id="battlePauseClassicBtn" type="button">Switch to Classic quiz</button>
+        </div>
+      </div>
     </div>
 
   </div>
