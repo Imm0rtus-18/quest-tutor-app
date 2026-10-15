@@ -10,6 +10,8 @@ const { CURRICULUM, PLACEHOLDER_TOPICS } = require('./curriculum');
 const { QUIZZES } = require('./quizzes');
 const { toOpenAiTools, parseGroqMessageToParts } = require('./groq-tools');
 const { validatePlotOnGraphArgs, DESMOS_COLOR_NAMES } = require('./graph-tools');
+const { isCorrectAnswer, gradeQuizAnswers, hasAnsweredQuestion } = require('./quiz-grading');
+const { BOSSES } = require('./bosses');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -933,6 +935,10 @@ async function applyLessonProgressAdjustment(userId, subjectLevel, currentIndex,
       quiz_session_id: rows[0].id,
       chapter_id: currentTopic.id,
       chapter_title: currentTopic.title,
+      // Flavor text only (name/taunts/lines) for the boss-battle entry
+      // screen — the frontend decides Fight vs. Classic; this is never
+      // required for grading, which stays entirely server-side either way.
+      boss: BOSSES[currentTopic.id] || null,
       // Never send correctIndex to the client before grading.
       questions: servedQuestions.map(q => ({ id: q.id, question: q.question, options: q.options }))
     };
@@ -1924,18 +1930,30 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
 // Quiz grading (deterministic — not LLM-judged, same approach as onboarding)
 // ---------------------------------------------------------------------------
 
+// Battle mode's per-question endpoint (see below) records each answer as
+// it's collected, but doesn't grade pass/fail itself — that still only
+// ever happens here, through the exact same gradeQuizAnswers() classic
+// mode uses, so there's one source of truth for "did they pass" and the
+// pass-creates-a-new-conversation flow either way.
+//
+// `answers` is optional: classic mode still sends the full array in one
+// call, same as always; battle mode omits it and this reads the raw
+// answers /api/quiz/answer already recorded on the session instead.
 app.post('/api/quiz/submit', requireAuth, async (req, res) => {
   const { quiz_session_id, answers } = req.body || {};
   const sessionId = parseInt(quiz_session_id, 10);
-  if (!Number.isInteger(sessionId) || !Array.isArray(answers)) {
-    return res.status(400).json({ error: 'quiz_session_id and an answers array are required.' });
+  if (!Number.isInteger(sessionId)) {
+    return res.status(400).json({ error: 'quiz_session_id is required.' });
+  }
+  if (answers !== undefined && !Array.isArray(answers)) {
+    return res.status(400).json({ error: 'answers must be an array.' });
   }
 
   const userId = req.session.userId;
 
   try {
     const { rows } = await pool.query(
-      'SELECT id, chapter_id, questions, passed FROM quiz_sessions WHERE id = $1 AND user_id = $2',
+      'SELECT id, chapter_id, questions, answers, passed FROM quiz_sessions WHERE id = $1 AND user_id = $2',
       [sessionId, userId]
     );
     const session = rows[0];
@@ -1945,18 +1963,8 @@ app.post('/api/quiz/submit', requireAuth, async (req, res) => {
     }
 
     const questions = session.questions;
-    const answerByQid = new Map(answers.map(a => [a.questionId, a.selectedIndex]));
-
-    let correctCount = 0;
-    const gradedAnswers = questions.map(q => {
-      const selectedIndex = answerByQid.has(q.id) ? answerByQid.get(q.id) : null;
-      const correct = selectedIndex === q.correctIndex;
-      if (correct) correctCount++;
-      return { questionId: q.id, selectedIndex, correct, concept: q.concept };
-    });
-
-    const total = questions.length;
-    const passed = correctCount >= Math.ceil(total * 0.9); // 90%+ (9/10) = pass
+    const rawAnswers = Array.isArray(answers) ? answers : (session.answers || []);
+    const { gradedAnswers, correctCount, total, passed } = gradeQuizAnswers(questions, rawAnswers);
 
     await pool.query(
       'UPDATE quiz_sessions SET answers = $1, score = $2, passed = $3 WHERE id = $4',
@@ -2008,6 +2016,57 @@ app.post('/api/quiz/submit', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Quiz submit error:', err);
     res.status(500).json({ error: 'Could not grade the quiz.' });
+  }
+});
+
+// Boss-battle mode's per-question check: grades ONE answer immediately
+// (so the battle can show a hit/miss right away) without ever sending the
+// correct option back. Never grades pass/fail itself and never touches
+// user_progress/conversations — only POST /api/quiz/submit (above) does
+// that, once, after the battle's last question. Each questionIndex can
+// only be answered once per session; answering twice or targeting
+// another user's session is rejected the same way /api/quiz/submit
+// already rejects a foreign session (the SQL predicate below is
+// identical to that route's).
+app.post('/api/quiz/answer', requireAuth, async (req, res) => {
+  const { sessionId, questionIndex, selectedIndex } = req.body || {};
+  const sid = parseInt(sessionId, 10);
+  const qIdx = parseInt(questionIndex, 10);
+  if (!Number.isInteger(sid) || !Number.isInteger(qIdx) || typeof selectedIndex !== 'number') {
+    return res.status(400).json({ error: 'sessionId, questionIndex, and selectedIndex are required.' });
+  }
+
+  const userId = req.session.userId;
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, questions, answers, passed FROM quiz_sessions WHERE id = $1 AND user_id = $2',
+      [sid, userId]
+    );
+    const session = rows[0];
+    if (!session) return res.status(404).json({ error: 'Quiz session not found.' });
+    if (session.passed !== null) {
+      return res.status(409).json({ error: 'This quiz session is no longer active.' });
+    }
+
+    const question = (session.questions || [])[qIdx];
+    if (!question) return res.status(400).json({ error: 'Invalid questionIndex.' });
+
+    const existingAnswers = Array.isArray(session.answers) ? session.answers : [];
+    if (hasAnsweredQuestion(existingAnswers, question.id)) {
+      return res.status(409).json({ error: 'This question has already been answered.' });
+    }
+
+    const updatedAnswers = [...existingAnswers, { questionId: question.id, selectedIndex }];
+    await pool.query('UPDATE quiz_sessions SET answers = $1 WHERE id = $2', [JSON.stringify(updatedAnswers), sid]);
+
+    // Same comparison gradeQuizAnswers uses internally — one source of
+    // truth either way. Only the boolean goes to the client, never
+    // question.correctIndex itself.
+    res.json({ correct: isCorrectAnswer(question, selectedIndex) });
+  } catch (err) {
+    console.error('Quiz answer error:', err);
+    res.status(500).json({ error: 'Could not record the answer.' });
   }
 });
 

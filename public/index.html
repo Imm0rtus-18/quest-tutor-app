@@ -20,6 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="mapData.js"></script>
 <script src="worldMap.js"></script>
+<script src="battle.js"></script>
 <style>
   :root{
     --bg:#F2ECE0;
@@ -739,6 +740,50 @@
   @keyframes km-bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
   @keyframes km-drift{from{transform:translateX(0);}to{transform:translateX(2400px);}}
 
+  /* ── Boss battle ──────────────────────────────────────────────────── */
+  .battle-shell{
+    background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
+    width:min(92vw,720px);max-height:92vh;overflow-y:auto;
+    padding:28px 26px;position:relative;
+  }
+  .battle-boss-name{
+    font-family:var(--font-display);font-weight:400;font-size:16px;
+    color:var(--accent);margin:0 0 8px;text-align:center;
+  }
+  .battle-start-sub{font-family:var(--font-body);color:var(--text-muted);text-align:center;margin:0 0 6px;}
+  .battle-start-hint{font-family:var(--font-body);font-size:13px;color:var(--text-muted);text-align:center;margin:0 0 22px;}
+  .battle-start-buttons{display:flex;flex-direction:column;gap:10px;}
+
+  .battle-hud{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .battle-hud .battle-boss-name{margin:0;flex-shrink:0;text-align:left;}
+  .battle-hp-bar{display:flex;gap:2px;flex:1;min-width:140px;}
+  .battle-hp-segment{flex:1;height:14px;background:var(--bg-panel-alt);border:2px solid var(--border);}
+  .battle-hp-segment.filled{background:var(--accent);}
+  .battle-tally{font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin:0;white-space:nowrap;}
+
+  .battle-canvas-wrap{position:relative;width:100%;background:#0a0a14;border:3px solid var(--border);}
+  .battle-canvas{
+    display:block;width:100%;aspect-ratio:320/180;
+    image-rendering:pixelated;image-rendering:crisp-edges;
+  }
+  .battle-banner{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    margin:0;padding:8px 16px;background:var(--bg-panel);border:2px solid var(--border);
+    font-family:var(--font-display);font-size:12px;color:var(--text);text-align:center;
+    box-shadow:var(--shadow-xs);
+  }
+  .battle-touch-controls{display:flex;justify-content:space-between;gap:10px;margin-top:10px;}
+  .battle-touch-btn{
+    flex:1;padding:14px;font-size:18px;background:var(--bg-panel-alt);color:var(--text);
+    border:2px solid var(--border);cursor:pointer;box-shadow:var(--shadow-xs);
+    -webkit-user-select:none;user-select:none;touch-action:manipulation;
+  }
+  .battle-touch-btn:active{box-shadow:0 0 0 var(--border);transform:translate(2px,2px);}
+
+  .battle-feedback{min-height:20px;font-family:var(--font-body);font-size:14px;margin:10px 0 0;color:var(--text);}
+  .battle-pause{text-align:center;}
+  .battle-pause .auth-submit, .battle-pause .ob-option{margin-top:10px;}
+
   /* Stacked rows (not a horizontal path) — the previous flex-shrink layout
      squeezed the Math node until overflow-wrap broke subject names
      mid-word ("MA/TH"). A vertical list, like the .mini-stat rows just
@@ -1051,6 +1096,56 @@
       <button class="km-view-close" id="knowledgeMapClose" type="button" aria-label="Close">✕ Close</button>
     </div>
     <div class="km-view-canvas" id="knowledgeMapBody"></div>
+  </div>
+</div>
+
+<!-- ── Boss battle (chapter quiz, platformer mode) — Classic quiz in
+     quizPanel is untouched and is always available as a fallback. All
+     rendering/physics lives in battle.js; this is just the DOM shell. -->
+<div class="overlay-bg hidden" id="battleOverlay">
+  <div class="battle-shell" id="battleShell">
+
+    <div class="battle-start" id="battleStart">
+      <p class="battle-boss-name" id="battleBossNameStart"></p>
+      <p class="battle-start-sub">Chapter Quiz · <span id="battleChapterTitleStart"></span></p>
+      <p class="battle-start-hint">Answer all 10 questions to clear the chapter — same grading either way.</p>
+      <div class="battle-start-buttons">
+        <button class="auth-submit" id="battleFightBtn" type="button">Fight</button>
+        <button class="ob-option" id="battleClassicBtn" type="button">Classic quiz</button>
+      </div>
+    </div>
+
+    <div class="battle-arena" id="battleArena" hidden>
+      <div class="battle-hud">
+        <p class="battle-boss-name" id="battleBossNameHud"></p>
+        <div class="battle-hp-bar" id="battleHpBar" aria-label="Boss HP" role="img"></div>
+        <p class="battle-tally" id="battleTally">Power-ups 0 / 10 · Correct 0</p>
+        <button class="icon-toggle" id="battlePauseBtn" type="button" aria-label="Pause battle">⏸</button>
+      </div>
+      <div class="battle-canvas-wrap">
+        <canvas class="battle-canvas" id="battleCanvas" width="320" height="180"></canvas>
+        <p class="battle-banner" id="battleBanner" hidden aria-live="polite"></p>
+      </div>
+      <div class="battle-touch-controls" id="battleTouchControls" hidden>
+        <button class="battle-touch-btn" id="touchLeftBtn" type="button" aria-label="Move left">◀</button>
+        <button class="battle-touch-btn" id="touchJumpBtn" type="button" aria-label="Jump">▲</button>
+        <button class="battle-touch-btn" id="touchRightBtn" type="button" aria-label="Move right">▶</button>
+      </div>
+    </div>
+
+    <div class="battle-question" id="battleQuestionOverlay" hidden>
+      <p class="ob-level-label" id="battleQuestionChapter"></p>
+      <p class="ob-question" id="battleQuestionText"></p>
+      <div class="ob-options" id="battleQuestionOptions"></div>
+      <p class="battle-feedback" id="battleFeedback" aria-live="polite"></p>
+    </div>
+
+    <div class="battle-pause" id="battlePauseMenu" hidden>
+      <p class="placement-title">Paused</p>
+      <button class="auth-submit" id="battleResumeBtn" type="button">Resume</button>
+      <button class="ob-option" id="battlePauseClassicBtn" type="button">Switch to Classic quiz</button>
+    </div>
+
   </div>
 </div>
 
@@ -1832,7 +1927,7 @@ async function refreshLessonMapData() {
 function applyTopicAdjustment(adj) {
   if (!adj) return;
   if (adj.quiz_required) {
-    enterQuizMode(adj);
+    offerBattleOrClassic(adj);
     return;
   }
   if (!adj.applied) return;
@@ -1844,16 +1939,61 @@ function applyTopicAdjustment(adj) {
   }
 }
 
+// ── Boss battle entry (battle.js owns the canvas/physics; this is just
+// the choice + handoff). "quiz me now" and the normal Gemini-triggered
+// readiness check both arrive here via applyTopicAdjustment, so both get
+// the same Fight/Classic choice and the same idle-continue suspension.
+function offerBattleOrClassic(adj) {
+  // quizActive is the same flag idle-continue/every auto-trigger already
+  // check before firing (see resetIdleTimer) — setting it the moment the
+  // choice is offered, not just once "Fight" is clicked, suspends them
+  // for the whole battle-start-through-results window per spec, with no
+  // separate suspension mechanism needed.
+  quizActive = true;
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  cancelKickoff();
+
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    enterQuizMode(adj);
+    return;
+  }
+
+  // The Desmos panel has no place during a battle — close it; the
+  // student can reopen it afterward same as any other time.
+  if (typeof graphPanelOpen !== 'undefined' && graphPanelOpen && typeof toggleGraphPanel === 'function') {
+    toggleGraphPanel();
+  }
+
+  window.BossBattle.start(adj, {
+    sounds: {
+      hit: () => playTone(180, 0, 0.07, 0.05),
+      correct: () => playReplyTone(),
+      wrong: () => playTone(140, 0, 0.12, 0.04)
+    },
+    onSwitchToClassic: partial => enterQuizMode(adj, partial),
+    onComplete: result => exitQuizMode(result)
+  });
+}
+
 // ── In-chapter quiz (adapts the onboarding one-question-at-a-time MCQ
 // component — same .ob-* classes/flow — shown inline in the chat panel
-// instead of a full-screen overlay) ─────────────────────────────────
-function enterQuizMode(adj) {
+// instead of a full-screen overlay) — the "Classic quiz" fallback,
+// unchanged from before boss battles existed. `prefill`, only ever set
+// when switching here FROM a battle in progress, is { answeredSoFar,
+// nextIndex } — those questions were already recorded server-side via
+// /api/quiz/answer, so they're neither re-asked nor re-counted: classic
+// mode just starts partway through and the full merged answers array
+// (battle's + whatever classic collects from here) is still what gets
+// sent in the one final /api/quiz/submit call, same as always.
+function enterQuizMode(adj, prefill) {
   quizActive = true;
   quizSessionId = adj.quiz_session_id;
   quizChapterTitle = adj.chapter_title || 'this chapter';
   quizQuestions = adj.questions || [];
-  quizAnswers = [];
-  quizCurrentIdx = 0;
+  quizAnswers = (prefill && Array.isArray(prefill.answeredSoFar)) ? prefill.answeredSoFar.slice() : [];
+  quizCurrentIdx = (prefill && typeof prefill.nextIndex === 'number')
+    ? Math.min(prefill.nextIndex, quizQuestions.length - 1) : 0;
   quizSelectedIndex = null;
 
   if (idleTimer) clearTimeout(idleTimer);
@@ -1865,7 +2005,7 @@ function enterQuizMode(adj) {
   quizPanel.hidden = false;
   quizChapterLabel.textContent = 'Chapter Quiz · ' + quizChapterTitle;
 
-  showQuizQuestion(0);
+  showQuizQuestion(quizCurrentIdx);
 }
 
 function showQuizQuestion(idx) {
