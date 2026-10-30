@@ -11,7 +11,7 @@
   const ROUND_SIZE = 10;
   const TABS = [
     { id: 'quick', label: 'Quick practice', enabled: true },
-    { id: 'steps', label: 'Show your work', enabled: false },
+    { id: 'steps', label: 'Show your work', enabled: true },
     { id: 'spot', label: 'Spot the mistake', enabled: false }
   ];
 
@@ -352,8 +352,162 @@
     again.focus();
   }
 
+  // ── Show your work ────────────────────────────────────────────────────
+  // The student types one line at a time; the server's checker decides
+  // each line. A valid line joins the log, an invalid one stays in the
+  // input with a short reason, and "can't check that format" is never
+  // counted as a mistake. The answer is never shown here.
+  const work = { problem: null, lines: [], rejected: '', done: false, busy: false };
+  let stepsBuilt = false;
+  const stepsFilter = (c) => c.steps;
+
+  async function renderSteps() {
+    const panel = document.getElementById('pr-panel-steps');
+    if (stepsBuilt) return;
+    panel.textContent = '';
+    try { await loadConcepts(); } catch (err) {
+      panel.appendChild(el('p', { class: 'pr-error' }, err.message));
+      return;
+    }
+    stepsBuilt = true;
+    const select = conceptSelect('pr-steps-concept', defaultConcept(stepsFilter), stepsFilter);
+    select.addEventListener('change', newWorkProblem);
+    panel.appendChild(el('div', { class: 'pr-controls' },
+      el('div', { class: 'pr-field' }, el('label', { class: 'pr-label', for: 'pr-steps-concept' }, 'Concept'), select)));
+    panel.appendChild(el('div', { id: 'pr-steps-stage' }));
+    newWorkProblem();
+  }
+
+  async function newWorkProblem() {
+    const stage = document.getElementById('pr-steps-stage');
+    stage.textContent = '';
+    stage.appendChild(el('p', { class: 'pr-muted' }, 'Loading a problem…'));
+    const concept = document.getElementById('pr-steps-concept').value;
+    try {
+      work.problem = await api('GET', `/api/practice/problem?concept=${encodeURIComponent(concept)}&mode=steps`);
+    } catch (err) {
+      stage.textContent = '';
+      stage.appendChild(el('p', { class: 'pr-error' }, err.message));
+      return;
+    }
+    work.lines = [work.problem.start];
+    work.rejected = '';
+    work.done = false;
+    renderWork();
+  }
+
+  function formatExample() {
+    return work.problem.kind === 'equation' ? '2x + 3 = 11' : '3x + 5';
+  }
+
+  function renderWork() {
+    const stage = document.getElementById('pr-steps-stage');
+    stage.textContent = '';
+    const p = work.problem;
+    const log = el('ol', { class: 'pr-log', id: 'pr-steps-log', 'aria-label': 'Your work so far' },
+      work.lines.map((line, i) => el('li', {},
+        el('span', { class: 'pr-mark ok', 'aria-hidden': 'true' }, i === 0 ? '▸' : '✓'),
+        el('span', {}, line),
+        el('span', { class: 'pr-sr-only' }, i === 0 ? '(starting line)' : '(checked)'))));
+    const card = el('div', { class: 'pr-card' },
+      el('p', { class: 'pr-progress' }, p.kind === 'equation' ? 'Solve it one line at a time' : 'Simplify it one line at a time'),
+      el('p', { class: 'pr-prompt' }, p.prompt),
+      log);
+
+    if (work.done) {
+      card.appendChild(el('div', { class: 'pr-result good' },
+        el('p', { class: 'pr-result-title' }, '✓ Solved'),
+        el('p', {}, work.summary)));
+      const next = el('button', { class: 'pr-btn primary', type: 'button', onclick: newWorkProblem }, 'New problem');
+      card.appendChild(el('div', { class: 'pr-actions' }, next));
+      stage.appendChild(card);
+      next.focus();
+      return;
+    }
+
+    const input = el('input', {
+      class: 'pr-input', type: 'text', id: 'pr-steps-input', autocomplete: 'off', spellcheck: 'false',
+      maxlength: String(p.maxLength || 60), 'aria-label': 'Your next line', 'aria-describedby': 'pr-steps-feedback',
+      placeholder: `Next line, e.g. ${formatExample()}`
+    });
+    input.value = work.rejected;
+    const check = el('button', { class: 'pr-btn primary', type: 'button', onclick: () => submitLine(input.value) }, 'Check line');
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitLine(input.value); } });
+    const undo = el('button', { class: 'pr-btn small', type: 'button', disabled: work.lines.length < 2, onclick: undoLine }, 'Undo last line');
+    const hint = el('button', { class: 'pr-btn small', type: 'button', id: 'pr-steps-hint' }, 'Stuck? Hint');
+    const hintBox = el('div', { id: 'pr-steps-hintbox' });
+    hint.addEventListener('click', () => {
+      hintBox.textContent = '';
+      askNova(hint, hintBox, {
+        trigger: 'step_hint', token: p.token,
+        lastValidLine: work.lines[work.lines.length - 1], rejectedLine: work.rejected || undefined
+      });
+    });
+    card.appendChild(el('div', { class: 'pr-typed' }, input, check));
+    card.appendChild(el('p', { class: 'pr-step-feedback', id: 'pr-steps-feedback', 'aria-live': 'polite' }));
+    card.appendChild(el('div', { class: 'pr-actions' }, undo, hint));
+    card.appendChild(hintBox);
+    stage.appendChild(card);
+    input.focus();
+  }
+
+  function setStepFeedback(text, bad) {
+    const fb = document.getElementById('pr-steps-feedback');
+    if (!fb) return;
+    fb.textContent = text;
+    fb.className = 'pr-step-feedback' + (bad ? ' bad' : '');
+  }
+
+  async function submitLine(raw) {
+    const line = String(raw).trim();
+    if (!line || work.busy || work.done) return;
+    work.busy = true;
+    let r;
+    try {
+      r = await api('POST', '/api/practice/step', {
+        token: work.problem.token, previousLine: work.lines[work.lines.length - 1], line
+      });
+    } catch (err) {
+      work.busy = false;
+      setStepFeedback(err.message, true);
+      return;
+    }
+    work.busy = false;
+    if (r.result === 'equivalent') {
+      work.lines.push(line);
+      work.rejected = '';
+      if (r.finished) {
+        work.done = true;
+        work.summary = `Solved in ${r.lineCount} line${r.lineCount === 1 ? '' : 's'}, ${r.slips} slip${r.slips === 1 ? '' : 's'}.`;
+        renderWork();
+        announce(work.summary);
+        return;
+      }
+      renderWork();
+      setStepFeedback('✓ That checks out. Keep going.', false);
+    } else if (r.result === 'not_equivalent') {
+      work.rejected = line;
+      setStepFeedback(`✕ ${r.reason}`, true);
+      const input = document.getElementById('pr-steps-input');
+      if (input) { input.focus(); input.select(); }
+    } else {
+      work.rejected = '';
+      setStepFeedback(`I can't check that format, try something like ${formatExample()}.`, false);
+      const input = document.getElementById('pr-steps-input');
+      if (input) input.focus();
+    }
+  }
+
+  function undoLine() {
+    if (work.lines.length < 2 || work.done) return;
+    work.lines.pop();
+    work.rejected = '';
+    renderWork();
+    setStepFeedback('Removed your last line.', false);
+  }
+
   // Later stages register their tab renderers here.
-  const PANELS = {};
+  const PANELS = { steps: renderSteps };
 
   window.Practice = { open, close, _internals: { el, api, askNova, announce, loadConcepts, conceptSelect, defaultConcept, state, PANELS, TABS } };
 })();

@@ -27,7 +27,8 @@ const fakeAskNova = async (system, user) => { novaCalls.push({ system, user }); 
 
 const app = express();
 app.use(express.json());
-app.use((req, res, next) => { const u = Number(req.headers['x-test-user'] || 0); req.session = u ? { userId: u, id: 'sess-' + u } : {}; next(); });
+const sessions = {};
+app.use((req, res, next) => { const u = Number(req.headers['x-test-user'] || 0); req.session = u ? (sessions[u] = sessions[u] || { userId: u, id: 'sess-' + u }) : {}; next(); });
 const requireAuth = (req, res, next) => (req.session.userId ? next() : res.status(401).json({ error: 'Not authenticated.' }));
 const practice = mountPractice(app, { pool: fakePool, requireAuth, askNova: fakeAskNova, secret: SECRET, curriculum: CURRICULUM });
 app.post('/api/tutor', requireAuth, (req, res) => {
@@ -146,6 +147,99 @@ async function test(name, fn) {
     const ok = await call('POST', '/api/tutor', { trigger: 'practice_feedback', token: r.body.token, answer: truth.answer });
     assert.strictEqual(ok.status, 400);
     assert.strictEqual(novaCalls.length, before + 1);
+  });
+
+  // ── Stage B: Show your work ──
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function stepsProblem(concept = 'two-step-equations') {
+    const r = await call('GET', `/api/practice/problem?concept=${concept}&mode=steps`);
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.ok(!('answer' in r.body) && !('options' in r.body));
+    return { ...r.body, truth: generateProblem(decode(r.body.token).c, decode(r.body.token).s) };
+  }
+
+  await test('steps: concepts flag which ones support Show your work', async () => {
+    const r = await call('GET', '/api/practice/concepts');
+    const all = r.body.chapters.flatMap((c) => c.concepts);
+    assert.ok(all.find((c) => c.id === 'two-step-equations').steps);
+    assert.ok(!all.find((c) => c.id === 'translating-sum-phrases').steps);
+    assert.strictEqual((await call('GET', '/api/practice/problem?concept=translating-sum-phrases&mode=steps')).status, 400);
+  });
+
+  await test('steps: valid, invalid, unknown, then finished with counts', async () => {
+    await sleep(1100);
+    const p = await stepsProblem();
+    const bad = await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: 'x = 999999' });
+    assert.strictEqual(bad.body.result, 'not_equivalent');
+    assert.strictEqual(bad.body.finished, false);
+    const unk = await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: 'x = y' });
+    assert.strictEqual(unk.body.result, 'unknown');
+    const good = await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: `${p.answer === undefined ? '' : ''}x = ${p.truth.answer}` });
+    assert.strictEqual(good.body.result, 'equivalent');
+    assert.strictEqual(good.body.finished, true);
+    assert.strictEqual(good.body.lineCount, 1);
+    assert.strictEqual(good.body.slips, 1); // unknown never counts as a slip
+    const rec = attempts.find((a) => a.nonce === decode(p.token).n);
+    assert.ok(rec && rec.mode === 'steps' && rec.step_errors === 1 && rec.correct === true);
+    const again = await call('POST', '/api/practice/step', { token: p.token, previousLine: `x = ${p.truth.answer}`, line: `x = ${p.truth.answer}` });
+    assert.strictEqual(again.status, 409);
+  });
+
+  await test('steps: "4 = x" form finishes; intermediate line does not', async () => {
+    await sleep(1100);
+    const p = await stepsProblem('one-step-equations-multiplication-division');
+    const mid = p.start; // restating the start is equivalent but not finished
+    const r1 = await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: mid });
+    assert.strictEqual(r1.body.result, 'equivalent');
+    assert.strictEqual(r1.body.finished, false);
+    const r2 = await call('POST', '/api/practice/step', { token: p.token, previousLine: mid, line: `${p.truth.answer} = x` });
+    assert.strictEqual(r2.body.finished, true);
+  });
+
+  await test('steps: client cannot claim a previous line the server never accepted', async () => {
+    await sleep(1100);
+    const p = await stepsProblem();
+    const r = await call('POST', '/api/practice/step', { token: p.token, previousLine: `x = ${p.truth.answer}`, line: `x = ${p.truth.answer}` });
+    assert.strictEqual(r.status, 409);
+  });
+
+  await test('steps: undo by sending an earlier accepted line', async () => {
+    await sleep(1100);
+    const p = await stepsProblem('two-step-equations');
+    const l1 = p.start.replace(' = ', ' + 0 = ');
+    await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: l1 });
+    const r = await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: `x = ${p.truth.answer}` });
+    assert.strictEqual(r.body.finished, true);
+    assert.strictEqual(r.body.lineCount, 1); // the undone line no longer counts
+  });
+
+  await test('steps: length cap enforced server-side', async () => {
+    await sleep(1100);
+    const p = await stepsProblem();
+    const r = await call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: 'x'.repeat(61) });
+    assert.strictEqual(r.body.result, 'unknown');
+  });
+
+  await test('steps: rate limit 5 per second per session', async () => {
+    await sleep(1100);
+    const p = await stepsProblem();
+    const statuses = await Promise.all(Array.from({ length: 7 }, () =>
+      call('POST', '/api/practice/step', { token: p.token, previousLine: p.start, line: 'x = y' }).then((r) => r.status)));
+    assert.strictEqual(statuses.filter((s) => s === 200).length, 5);
+    assert.strictEqual(statuses.filter((s) => s === 429).length, 2);
+  });
+
+  await test('step_hint quotes the server-held last line and the code reason, never the answer', async () => {
+    await sleep(1100);
+    const p = await stepsProblem('two-step-equations');
+    const before = novaCalls.length;
+    const r = await call('POST', '/api/tutor', { trigger: 'step_hint', token: p.token, lastValidLine: 'x = 1', rejectedLine: 'x = 999999' });
+    assert.strictEqual(r.status, 200);
+    const sent = novaCalls[before].user;
+    assert.ok(sent.includes(`Their last correct line: "${p.start}"`), sent);
+    assert.ok(sent.includes('What the checker said about it:'));
+    assert.ok(!sent.includes(`x = ${p.truth.answer}"`));
+    assert.ok(/Never give the final answer/.test(sent));
   });
 
   server.close();
