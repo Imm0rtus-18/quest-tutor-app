@@ -12,7 +12,7 @@
   const TABS = [
     { id: 'quick', label: 'Quick practice', enabled: true },
     { id: 'steps', label: 'Show your work', enabled: true },
-    { id: 'spot', label: 'Spot the mistake', enabled: false }
+    { id: 'spot', label: 'Spot the mistake', enabled: true }
   ];
 
   let root = null;
@@ -506,8 +506,132 @@
     setStepFeedback('Removed your last line.', false);
   }
 
+  // ── Spot the mistake ──────────────────────────────────────────────────
+  // A code-built worked solution; the student picks the first wrong line
+  // (line 1 is the problem itself, so it isn't pickable) or "No mistake".
+  const SPOT_ROUND = 5;
+  const spotState = { round: [], puzzle: null, answered: false };
+  let spotBuilt = false;
+
+  function renderSpotPanel() {
+    if (spotBuilt) return;
+    spotBuilt = true;
+    const panel = document.getElementById('pr-panel-spot');
+    panel.textContent = '';
+    panel.appendChild(el('p', { class: 'pr-muted' }, 'Each solution has at most one mistake. Find the first line that’s wrong, or say it’s all correct.'));
+    panel.appendChild(el('div', { id: 'pr-spot-stage' }));
+    startSpotRound();
+  }
+
+  function startSpotRound() {
+    spotState.round = [];
+    nextPuzzle();
+  }
+
+  async function nextPuzzle() {
+    const stage = document.getElementById('pr-spot-stage');
+    if (spotState.round.length >= SPOT_ROUND) return renderSpotSummary();
+    stage.textContent = '';
+    stage.appendChild(el('p', { class: 'pr-muted' }, 'Loading a solution…'));
+    try {
+      spotState.puzzle = await api('GET', '/api/practice/spot');
+    } catch (err) {
+      stage.textContent = '';
+      stage.appendChild(el('p', { class: 'pr-error' }, err.message));
+      return;
+    }
+    spotState.answered = false;
+    renderPuzzle();
+  }
+
+  function renderPuzzle() {
+    const stage = document.getElementById('pr-spot-stage');
+    stage.textContent = '';
+    const p = spotState.puzzle;
+    const list = el('ol', { class: 'pr-lines', 'aria-label': 'Worked solution' });
+    p.lines.forEach((line, i) => {
+      const content = [el('span', { class: 'pr-num', 'aria-hidden': 'true' }, String(i + 1)), el('span', {}, line)];
+      if (i === 0) {
+        list.appendChild(el('li', {}, el('div', { class: 'pr-line', 'aria-label': `Line 1, the problem: ${line}` }, content)));
+      } else {
+        list.appendChild(el('li', {}, el('button', {
+          class: 'pr-line', type: 'button', 'data-index': String(i), 'aria-label': `Line ${i + 1}: ${line}. Pick as the first wrong line`,
+          onclick: () => answerSpot(i)
+        }, content)));
+      }
+    });
+    const none = el('button', { class: 'pr-btn', type: 'button', onclick: () => answerSpot('none') }, 'No mistake, it’s all correct.');
+    stage.appendChild(el('div', { class: 'pr-card' },
+      el('p', { class: 'pr-progress' }, `Puzzle ${spotState.round.length + 1} of ${SPOT_ROUND} · ${p.template}`),
+      el('p', { class: 'pr-prompt' }, 'Which line is the first one with a mistake?'),
+      list,
+      el('div', { class: 'pr-actions' }, none),
+      el('div', { id: 'pr-spot-result' })));
+    stage.querySelector('button.pr-line').focus();
+  }
+
+  async function answerSpot(pick) {
+    if (spotState.answered) return;
+    const p = spotState.puzzle;
+    let r;
+    try {
+      r = await api('POST', '/api/practice/spot/answer', { token: p.token, lineIndex: pick });
+    } catch (err) {
+      announce(err.message);
+      return;
+    }
+    spotState.answered = true;
+    spotState.round.push({ correct: r.correct, errorLabel: r.errorLabel });
+
+    const stage = document.getElementById('pr-spot-stage');
+    stage.querySelectorAll('button.pr-line').forEach((b) => {
+      b.disabled = true;
+      const i = Number(b.dataset.index);
+      if (i === r.errorIndex) b.classList.add('is-error');
+      if (i === pick) b.classList.add('is-picked');
+    });
+    stage.querySelectorAll('.pr-actions .pr-btn').forEach((b) => { b.disabled = true; });
+
+    const box = document.getElementById('pr-spot-result');
+    const title = r.correct
+      ? (r.errorIndex === null ? '✓ Right, there’s no mistake.' : `✓ Right, line ${r.errorIndex + 1} is the first wrong line.`)
+      : (r.errorIndex === null ? '✕ Not quite. There’s no mistake in this one.' : `✕ Not quite. The first wrong line is line ${r.errorIndex + 1}.`);
+    const result = el('div', { class: `pr-result ${r.correct ? 'good' : 'bad'}` },
+      el('p', { class: 'pr-result-title' }, title),
+      r.errorIndex !== null ? el('div', { class: 'pr-compare' },
+        el('div', {}, el('span', { class: 'pr-label' }, `Line ${r.errorIndex + 1} says`), el('br'), p.lines[r.errorIndex]),
+        el('div', {}, el('span', { class: 'pr-label' }, 'It should have been'), el('br'), r.correctLine)) : null,
+      r.errorLabel ? el('p', {}, `Mistake: ${r.errorLabel}.`) : null,
+      el('p', {}, r.explanation));
+    const next = el('button', { class: 'pr-btn primary', type: 'button', onclick: nextPuzzle },
+      spotState.round.length >= SPOT_ROUND ? 'See summary' : 'Next puzzle');
+    const explainBtn = el('button', { class: 'pr-btn', type: 'button' }, 'Explain it to me');
+    explainBtn.addEventListener('click', () => askNova(explainBtn, result, { trigger: 'spot_feedback', token: p.token, lineIndex: pick }));
+    result.appendChild(el('div', { class: 'pr-actions' }, next, explainBtn));
+    box.appendChild(result);
+    announce(title);
+    next.focus();
+  }
+
+  function renderSpotSummary() {
+    const stage = document.getElementById('pr-spot-stage');
+    stage.textContent = '';
+    const right = spotState.round.filter((r) => r.correct).length;
+    const missed = spotState.round.filter((r) => !r.correct).map((r) => r.errorLabel || 'a solution with no mistake');
+    const again = el('button', { class: 'pr-btn primary', type: 'button', onclick: startSpotRound }, 'Another round');
+    stage.appendChild(el('div', { class: 'pr-card' },
+      el('p', { class: 'pr-progress' }, 'Round summary'),
+      el('p', { class: 'pr-prompt' }, `${right} out of ${spotState.round.length} spotted`),
+      missed.length
+        ? el('div', {}, el('p', {}, 'Ones that got past you:'), el('ul', { class: 'pr-summary-list' }, missed.map((m) => el('li', {}, m))))
+        : el('p', {}, 'Sharp eyes, nothing got past you.'),
+      el('div', { class: 'pr-actions' }, again)));
+    announce(`Round done: ${right} out of ${spotState.round.length}.`);
+    again.focus();
+  }
+
   // Later stages register their tab renderers here.
-  const PANELS = { steps: renderSteps };
+  const PANELS = { steps: renderSteps, spot: renderSpotPanel };
 
   window.Practice = { open, close, _internals: { el, api, askNova, announce, loadConcepts, conceptSelect, defaultConcept, state, PANELS, TABS } };
 })();

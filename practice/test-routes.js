@@ -242,6 +242,60 @@ async function test(name, fn) {
     assert.ok(/Never give the final answer/.test(sent));
   });
 
+  // ── Stage C: Spot the mistake ──
+  const { generatePuzzle } = require('./spot');
+  const truthOf = (token) => { const p = decode(token); return generatePuzzle(p.c.slice(5), p.s); };
+
+  await test('spot: response has lines but no error index', async () => {
+    const r = await call('GET', '/api/practice/spot');
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(Object.keys(r.body).sort(), ['lines', 'template', 'token']);
+    assert.ok(r.body.lines.length >= 5 && r.body.lines.length <= 7);
+    assert.strictEqual(decode(r.body.token).m, 'spot');
+  });
+
+  await test('spot: right pick is correct and recorded once; wrong pick returns the truth', async () => {
+    let r, truth;
+    do { r = await call('GET', '/api/practice/spot?template=two-step'); truth = truthOf(r.body.token); } while (truth.errorIndex === null);
+    const right = await call('POST', '/api/practice/spot/answer', { token: r.body.token, lineIndex: truth.errorIndex });
+    assert.strictEqual(right.body.correct, true);
+    assert.strictEqual(right.body.recorded, true);
+    assert.strictEqual(right.body.correctLine, truth.correctLine);
+    assert.ok(right.body.explanation.includes(truth.correctLine));
+    const again = await call('POST', '/api/practice/spot/answer', { token: r.body.token, lineIndex: 'none' });
+    assert.strictEqual(again.body.correct, false);
+    assert.strictEqual(again.body.recorded, false);
+    assert.strictEqual(again.body.errorIndex, truth.errorIndex);
+  });
+
+  await test('spot: "none" is correct on a no-error puzzle', async () => {
+    let r, truth;
+    do { r = await call('GET', '/api/practice/spot'); truth = truthOf(r.body.token); } while (truth.errorIndex !== null);
+    const a = await call('POST', '/api/practice/spot/answer', { token: r.body.token, lineIndex: 'none' });
+    assert.strictEqual(a.body.correct, true);
+    assert.strictEqual(a.body.errorIndex, null);
+  });
+
+  await test('spot: bad line index and non-spot token rejected', async () => {
+    const r = await call('GET', '/api/practice/spot');
+    assert.strictEqual((await call('POST', '/api/practice/spot/answer', { token: r.body.token, lineIndex: 0 })).status, 422);
+    assert.strictEqual((await call('POST', '/api/practice/spot/answer', { token: r.body.token, lineIndex: 99 })).status, 422);
+    const q = await call('GET', '/api/practice/problem?concept=two-step-equations');
+    assert.strictEqual((await call('POST', '/api/practice/spot/answer', { token: q.body.token, lineIndex: 1 })).status, 400);
+  });
+
+  await test('spot_feedback quotes server-rebuilt lines and truth', async () => {
+    let r, truth;
+    do { r = await call('GET', '/api/practice/spot'); truth = truthOf(r.body.token); } while (truth.errorIndex === null);
+    const before = novaCalls.length;
+    const f = await call('POST', '/api/tutor', { trigger: 'spot_feedback', token: r.body.token, lineIndex: 'none' });
+    assert.strictEqual(f.status, 200);
+    const sent = novaCalls[before].user;
+    assert.ok(sent.includes(`It should have been "${truth.correctLine}"`));
+    assert.ok(sent.includes('they said there was no mistake'));
+    truth.lines.forEach((l, i) => assert.ok(sent.includes(`Line ${i + 1}: "${l}"`)));
+  });
+
   server.close();
   const w = Math.max(...results.map((r) => r[0].length));
   for (const [n, s] of results) console.log(`${n.padEnd(w)}  ${s}`);
