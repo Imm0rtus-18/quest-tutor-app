@@ -1,0 +1,124 @@
+/* Practice view — full-viewport takeover, same treatment as the Knowledge
+   Map. Uses only the app's theme tokens (--bg, --text, --accent, …) so it
+   follows the light/dark toggle without listening for it. */
+
+.pr-overlay{
+  position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;
+  background-color:var(--bg);color:var(--text);font-family:var(--font-body);
+}
+.pr-overlay[hidden]{display:none;}
+
+.pr-header{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:14px 20px;border-bottom:3px solid var(--accent);background:var(--bg-panel);
+}
+.pr-title{font-family:var(--font-display);font-size:14px;margin:0;}
+.pr-tabs{display:flex;gap:4px;flex-wrap:wrap;background:var(--bg-panel-alt);border:3px solid var(--border);padding:4px;}
+.pr-tab{
+  border:none;background:transparent;color:var(--text-muted);cursor:pointer;
+  font-family:var(--font-display);font-size:9px;padding:9px 10px;
+}
+.pr-tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);}
+.pr-tab:disabled{cursor:not-allowed;opacity:0.45;}
+.pr-close{
+  margin-left:auto;background:var(--bg-panel);color:var(--text);border:2px solid var(--border);
+  font-family:var(--font-display);font-size:10px;cursor:pointer;padding:10px 16px;box-shadow:var(--shadow-sm);
+}
+.pr-close:hover{background:var(--bg-panel-alt);}
+
+.pr-body{flex:1;overflow:auto;padding:20px 16px 40px;}
+.pr-panel{max-width:760px;margin:0 auto;}
+.pr-panel[hidden]{display:none;}
+
+.pr-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px;}
+.pr-field{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1 1 260px;}
+.pr-label{font-family:var(--font-display);font-size:9px;color:var(--text-muted);}
+.pr-select,.pr-input{
+  width:100%;background:var(--bg-panel-alt);color:var(--text);border:3px solid var(--border);
+  padding:10px 12px;font-family:var(--font-body);font-size:15px;border-radius:0;
+}
+.pr-select:focus,.pr-input:focus{border-color:var(--accent);outline:none;}
+.pr-mode{display:flex;gap:4px;border:0;padding:0;margin:0;}
+.pr-mode legend{font-family:var(--font-display);font-size:9px;color:var(--text-muted);margin-bottom:6px;padding:0;}
+.pr-mode label{
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  background:var(--bg-panel);border:2px solid var(--border);padding:8px 10px;font-size:13px;
+}
+.pr-mode input:disabled + span{opacity:0.45;}
+
+.pr-card{
+  background:var(--bg-panel);border:3px solid var(--border);box-shadow:var(--shadow);
+  padding:20px;margin-bottom:16px;
+}
+.pr-progress{font-family:var(--font-display);font-size:9px;color:var(--text-muted);margin:0 0 12px;}
+.pr-prompt{font-size:20px;line-height:1.5;margin:0 0 16px;overflow-wrap:anywhere;}
+.pr-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;}
+.pr-option,.pr-btn{
+  background:var(--bg-panel-alt);color:var(--text);border:3px solid var(--border);box-shadow:var(--shadow-xs);
+  font-family:var(--font-body);font-size:16px;padding:12px 14px;cursor:pointer;text-align:left;
+  transition:transform 0.08s, box-shadow 0.08s;
+}
+.pr-option:hover:not(:disabled),.pr-btn:hover:not(:disabled){background:var(--bg-panel);}
+.pr-option:active:not(:disabled),.pr-btn:active:not(:disabled){transform:translate(2px,2px);box-shadow:0 0 0 var(--border);}
+.pr-option:disabled,.pr-btn:disabled{cursor:default;}
+.pr-option.is-correct{border-color:#2f8f4e;background:rgba(47,143,78,0.16);}
+.pr-option.is-wrong{border-color:var(--error);background:var(--accent-soft);}
+.pr-btn.primary{background:var(--accent);color:var(--accent-ink);}
+.pr-btn.small{font-size:13px;padding:8px 10px;}
+.pr-typed{display:flex;gap:10px;flex-wrap:wrap;}
+.pr-typed .pr-input{flex:1 1 180px;}
+
+.pr-result{margin-top:16px;border-left:6px solid var(--border);padding:10px 14px;background:var(--bg-panel-alt);}
+.pr-result.good{border-left-color:#2f8f4e;}
+.pr-result.bad{border-left-color:var(--error);}
+.pr-result-title{font-family:var(--font-display);font-size:11px;margin:0 0 8px;}
+.pr-worked{margin:8px 0 0;padding-left:22px;line-height:1.6;}
+.pr-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;}
+.pr-nova{margin-top:12px;padding:12px 14px;border:2px dashed var(--accent);background:var(--bg-panel);line-height:1.5;}
+.pr-nova-name{font-family:var(--font-display);font-size:9px;color:var(--accent);display:block;margin-bottom:6px;}
+.pr-error{color:var(--error);margin:8px 0 0;}
+.pr-muted{color:var(--text-muted);}
+
+.pr-summary-list{padding-left:20px;line-height:1.6;}
+
+/* Show your work */
+.pr-log{list-style:none;margin:0 0 12px;padding:0;font-size:18px;}
+.pr-log li{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--text-muted);overflow-wrap:anywhere;}
+.pr-log .pr-mark{font-family:var(--font-display);font-size:10px;min-width:22px;}
+.pr-log .ok{color:#2f8f4e;}
+.pr-step-feedback{margin:8px 0 0;min-height:1.4em;}
+.pr-step-feedback.bad{color:var(--error);}
+
+/* Spot the mistake */
+.pr-lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+.pr-line{
+  display:flex;gap:12px;align-items:baseline;width:100%;text-align:left;
+  background:var(--bg-panel-alt);color:var(--text);border:3px solid var(--border);
+  font-family:var(--font-body);font-size:17px;padding:10px 12px;cursor:pointer;
+}
+.pr-line:disabled{cursor:default;}
+.pr-line .pr-num{font-family:var(--font-display);font-size:9px;color:var(--text-muted);min-width:28px;}
+.pr-line.is-error{border-color:var(--error);background:var(--accent-soft);}
+.pr-line.is-picked{outline:3px dashed var(--text);outline-offset:2px;}
+.pr-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.pr-compare div{border:2px solid var(--border);padding:10px;background:var(--bg-panel);overflow-wrap:anywhere;}
+@media (max-width:520px){.pr-compare{grid-template-columns:1fr;}}
+
+@media (max-width:600px){
+  .pr-header{padding:12px 16px;}
+  .pr-close{margin-left:0;}
+  .pr-prompt{font-size:18px;}
+}
+
+@media (prefers-reduced-motion: reduce){
+  .pr-option,.pr-btn{transition:none;}
+  .pr-option:active:not(:disabled),.pr-btn:active:not(:disabled){transform:none;}
+}
+
+.pr-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+
+/* The app's pixel font is all caps, which turns x into X. Math text uses a
+   readable monospace face so variables keep their case. */
+.pr-prompt,.pr-option,.pr-input,.pr-worked,.pr-log,.pr-line,.pr-compare,.pr-select,.pr-nova,.pr-result p:not(.pr-result-title):not(.pr-label){
+  font-family:ui-monospace,'Cascadia Mono',Consolas,'Courier New',monospace;
+}

@@ -25,6 +25,8 @@
 <script src="battle-attacks.js"></script>
 <script src="battle-sprites.js"></script>
 <script src="battle.js"></script>
+<link rel="stylesheet" href="practice.css">
+<script src="practice.js"></script>
 <style>
   :root{
     --bg:#F2ECE0;
@@ -1310,6 +1312,7 @@
           </div>
           <div class="chat-header-actions">
             <button class="icon-toggle" id="graphToggleBtn" type="button" aria-label="Open graphing calculator" title="Graph">📈</button>
+            <button class="reset-btn" id="practiceBtn" type="button">Practice</button>
             <button class="reset-btn" id="resetBtn" type="button">New topic</button>
           </div>
         </div>
@@ -3025,6 +3028,9 @@ knowledgeMapBox.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKnowledgeMap(); }
 });
 knowledgeMapClose.addEventListener('click', closeKnowledgeMap);
+
+// Practice view lives entirely in practice.js/practice.css.
+document.getElementById('practiceBtn').addEventListener('click', () => window.Practice.open());
 
 // ── Graph panel (embedded Desmos calculator) ────────────────────────
 // Loaded lazily: the script tag is only injected the first time the

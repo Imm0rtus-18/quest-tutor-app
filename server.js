@@ -12,6 +12,7 @@ const { toOpenAiTools, parseGroqMessageToParts } = require('./groq-tools');
 const { validatePlotOnGraphArgs, DESMOS_COLOR_NAMES } = require('./graph-tools');
 const { isCorrectAnswer, gradeQuizAnswers, hasAnsweredQuestion } = require('./quiz-grading');
 const { BOSSES } = require('./bosses');
+const { mountPractice, PRACTICE_SCHEMA_SQL } = require('./practice/routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -204,6 +205,7 @@ async function initDb() {
     ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS note TEXT;
     ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'approved';
   `);
+  await pool.query(PRACTICE_SCHEMA_SQL);
 }
 
 // XP cap per level — must stay in sync with the same formula in the frontend.
@@ -1705,6 +1707,32 @@ app.get('/api/graph-config', requireAuth, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Practice (infinite practice, step checker, spot the mistake) — lives in
+// practice/. Code decides correctness there; Nova is only ever asked to
+// explain, through the practice triggers on /api/tutor below (no tools, no
+// XP, nothing saved to chat history).
+// ---------------------------------------------------------------------------
+
+async function askNovaPlain(systemPrompt, userText) {
+  const { response, data } = await callGeminiWithFallback(systemPrompt, [{ role: 'user', content: userText }]);
+  if (!response.ok) throw new Error((data.error && data.error.message) || 'Tutor service error');
+  const candidate = (data.candidates || [])[0];
+  const text = ((candidate && candidate.content && candidate.content.parts) || [])
+    .map(part => part.text || '')
+    .filter(Boolean)
+    .join('\n');
+  return stripMarkdownAndLatex(text).trim();
+}
+
+const practice = mountPractice(app, {
+  pool,
+  requireAuth,
+  askNova: askNovaPlain,
+  secret: process.env.SESSION_SECRET || 'dev-fallback-secret-change-in-prod',
+  curriculum: CURRICULUM
+});
+
+// ---------------------------------------------------------------------------
 // Tutor route
 // ---------------------------------------------------------------------------
 
@@ -1713,6 +1741,12 @@ app.post('/api/tutor', requireAuth, async (req, res) => {
     return res.status(500).json({
       error: 'Server is missing GEMINI_API_KEY. Add it to a .env file (see .env.example) and restart the server.'
     });
+  }
+
+  // Practice feedback/hint triggers are one-off explanations, not chat
+  // turns — handled entirely in practice/routes.js.
+  if (practice.isPracticeTrigger(req.body && req.body.trigger)) {
+    return practice.handleTutorTrigger(req, res);
   }
 
   const { messages, subject, trigger, final, conversation_id, graph_state } = req.body || {};
